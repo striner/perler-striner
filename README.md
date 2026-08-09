@@ -1,155 +1,247 @@
-# Perler Studio 🔴🟡🔵🟢
+# Perler Striner 🔴🟡🔵🟢
 
-Turn any image into a **Perler (fuse) bead pattern** — entirely in your browser. Upload a picture, tune the size, and get a pegboard-ready chart with a bead shopping list.
+**Perler Striner** is a browser-based fuse-bead / Perler-bead pattern maker.
+Upload an image, choose a bead color system, adjust the pattern width, and export
+a pegboard-ready PNG chart with a bead shopping list.
 
-🔗 **Live: [perler.gujiakai.top](https://perler.gujiakai.top/)** · [English](https://perler.gujiakai.top/) / [中文](https://perler.gujiakai.top/zh/)
+Everything runs in the browser. Images are processed locally with Canvas and are
+not uploaded to a backend service.
 
-**Everything runs client-side. Your images never leave your device.**
+## Links
 
-## ✨ Features
+- Live demo: <https://striner.github.io/perler-striner/>
+- Chinese UI: <https://striner.github.io/perler-striner/zh/>
+- Repository: <https://github.com/striner/perler-striner>
+- GitHub profile: <https://github.com/striner>
 
-- 🖼️ **Upload or drag & drop** any image (a built-in sample is included)
-- 🎯 **Perceptually accurate colors** — every pixel is matched using CIEDE2000 distance in CIE-Lab space
-- 🏷️ **Seven bead color systems** — Perler, MARD 221 & 291, COCO 291, Hama, Artkal S and Artkal Mini (1,392 colors in total), switchable per pattern
-- 🧮 **Floyd–Steinberg dithering** (toggleable) for smoother photo gradients
-- 📏 **Pegboard-aware grid** — guides every 10 pegs plus 29×29 board boundaries, so you know exactly how many standard pegboards you need
-- 🛒 **Bead shopping list** — per-color counts, sorted by quantity; click a color to highlight where it goes on the board
-- 💾 **PNG export** — pattern plus printable color legend in one image
-- 📐 **Physical size estimate** for standard 5 mm midi beads
-- 🫥 Transparent pixels become empty pegs, so cut-out PNGs make clean shaped patterns
-- 🌐 **English & 中文** — `/` for English, `/zh/` for Chinese, switchable in the header
+## Features
 
-## 🎨 The palettes
+- Upload or drag-and-drop local images.
+- Generate bead patterns by width in beads while preserving the source aspect ratio.
+- Choose from 7 bead color systems with 1,392 colors in total.
+- Match image colors to real bead colors using CIE Lab + CIEDE2000 perceptual distance.
+- Toggle Floyd–Steinberg dithering for smoother photo-like gradients.
+- Treat transparent pixels as empty pegs.
+- Remove near-white border-connected backgrounds automatically.
+- Show grid lines, coordinate labels, and pegboard-friendly guides.
+- Calculate bead counts and generate a shopping list sorted by quantity.
+- Click a color in the shopping list to highlight its positions on the pattern.
+- Export a printable PNG containing the pattern and the color legend.
+- Support English and Chinese pages.
 
-| System | Colors | Bead size | Codes look like | Source |
+## Supported color palettes
+
+| System | Colors | Bead size | Example codes | Data source |
 | :-- | --: | :-- | :-- | :-- |
-| **Perler** | 103 | 5 mm midi | `80-15211` + name | [beadcolors](https://github.com/maxcleme/beadcolors) (measured) |
-| **MARD 221** | 221 | 5 mm midi | `A1`, `F15` | [bitbead.app](https://www.bitbead.app/en/colors/mard) |
-| **MARD 291** | 291 | 2.6 mm mini | `A1` … `ZG8` | [bitbead.app](https://www.bitbead.app/en/colors/mard-291) |
-| **COCO 291** | 291 | 2.6 mm mini | `E02`, `K39` | [bitbead.app](https://www.bitbead.app/en/colors/coco) |
-| **Hama** | 89 | 5 mm midi | `H01` + name | [bitbead.app](https://www.bitbead.app/en/colors/hama) |
-| **Artkal S** | 176 | 5 mm midi | `S01` + name | [bitbead.app](https://www.bitbead.app/en/colors/artkal) |
-| **Artkal Mini** | 221 | 2.6 mm mini | `MA1` + 中文/EN name | [bitbead.app](https://www.bitbead.app/en/colors/artkal-mini) |
+| Perler | 103 | 5 mm midi | `80-15211` | [beadcolors](https://github.com/maxcleme/beadcolors) |
+| MARD 221 | 221 | 5 mm midi | `A1`, `F15` | [bitbead.app](https://www.bitbead.app/en/colors/mard) |
+| MARD 291 | 291 | 2.6 mm mini | `A1` ... `ZG8` | [bitbead.app](https://www.bitbead.app/en/colors/mard-291) |
+| COCO 291 | 291 | 2.6 mm mini | `E02`, `K39` | [bitbead.app](https://www.bitbead.app/en/colors/coco) |
+| Hama | 89 | 5 mm midi | `H01` | [bitbead.app](https://www.bitbead.app/en/colors/hama) |
+| Artkal S | 176 | 5 mm midi | `S01` | [bitbead.app](https://www.bitbead.app/en/colors/artkal) |
+| Artkal Mini | 221 | 2.6 mm mini | `MA1` | [bitbead.app](https://www.bitbead.app/en/colors/artkal-mini) |
 
-**Perler** is the classic American fuse-bead brand; the app ships its complete current catalog with official product codes and RGB values measured from physical beads. **MARD** and **COCO** are popular Chinese systems organized as lettered series — the 221 chart covers 5 mm midi beads, while the 291-color charts target 2.6 mm minis for high-detail work. **Hama** is the classic Danish brand, and **Artkal** is the Chinese brand best known in the pixel-art community, in both midi (S) and mini lines.
+## Tech stack
 
-The physical-size estimate and pegboard math adapt to each system's bead size automatically. A few smaller systems (Nabbi 30, Yant 119) aren't included yet — adding one is a small change to `scripts/gen-palette.mjs` plus a new entry in the `BRANDS` map. PRs welcome.
+| Area | Choice |
+| :-- | :-- |
+| Site framework | [Astro](https://astro.build) |
+| Interactive app | [React](https://react.dev) island |
+| Language | TypeScript |
+| Styling | [Tailwind CSS](https://tailwindcss.com) |
+| UI components | shadcn/ui-style components + Radix primitives |
+| Icons | lucide-react |
+| Image processing | Browser Canvas / ImageData |
+| Color matching | CIE Lab + CIEDE2000 |
+| Export | Canvas `toBlob()` PNG |
+| Hosting | Static output, GitHub Pages |
 
-## 🧱 Tech stack
+The production build is fully static. There is no application server, database,
+or image-upload API.
 
-[Astro](https://astro.build) · [React](https://react.dev) island · [Tailwind CSS](https://tailwindcss.com) · [shadcn/ui](https://ui.shadcn.com) — fully static output, zero backend.
+## How it works
+
+The core conversion pipeline is:
+
+```text
+Upload image
+→ Decode image in the browser
+→ Downsample the image to a bead grid
+→ Convert each grid pixel to a bead color
+→ Optionally diffuse color error with dithering
+→ Build bead-count statistics
+→ Render the pattern and legend to Canvas
+→ Export PNG
+```
+
+### 1. Decode and downsample
+
+The React app loads the source image with `createImageBitmap()` when available,
+falling back to `HTMLImageElement` decoding when needed. The target pattern size
+is based on the selected width in beads:
+
+```text
+targetHeight = round(targetWidth * sourceHeight / sourceWidth)
+```
+
+The image is drawn to an offscreen Canvas at the target bead-grid size. At this
+point, **one pixel equals one bead**. Large images are downsampled in multiple
+halving steps before the final resize, which helps preserve detail and reduce
+aliasing.
+
+### 2. Transparent pixels and background cleanup
+
+Pixels with alpha below the threshold are treated as empty cells. For images with
+a white background, the generator also performs a border-connected near-white
+cleanup:
+
+- Start from the image borders.
+- Find near-white pixels connected to the border.
+- Mark those cells as empty.
+- Preserve internal white details that are not connected to the border.
+
+This is useful for logos, cut-out PNGs, and product photos on white backgrounds.
+
+### 3. Perceptual color matching
+
+For every solid cell, the app maps the RGB color to the nearest real bead color
+in the selected palette.
+
+Instead of using plain RGB distance, the matcher uses:
+
+```text
+sRGB → CIE Lab → CIEDE2000
+```
+
+CIEDE2000 is a perceptual color-difference formula. It better approximates how
+humans judge color differences than simple Euclidean distance in RGB space.
+
+The palette colors are pre-converted to Lab and cached per brand. Repeated RGB
+lookups are also cached to keep the browser-side generation fast.
+
+### 4. Floyd–Steinberg dithering
+
+When dithering is enabled, the app uses Floyd–Steinberg error diffusion. After a
+pixel is replaced by its nearest bead color, the remaining color error is spread
+to neighboring unprocessed cells:
+
+```text
+        current    7/16
+3/16      5/16     1/16
+```
+
+This can make photos and gradients look smoother with a limited bead palette,
+but it may also introduce more scattered colors, so it is exposed as a toggle.
+
+### 5. Rendering and export
+
+The generated `Pattern` data contains:
+
+- pattern width and height,
+- a typed array of palette indexes per cell,
+- `-1` for empty cells,
+- used colors and bead counts,
+- total bead count.
+
+The renderer draws the final pattern to Canvas with:
+
+- cell color blocks,
+- readable bead codes,
+- coordinate labels,
+- grid lines,
+- guide lines,
+- highlight mode for a selected color,
+- export layout with a printable legend.
+
+## Project structure
 
 ```text
 src/
-├── lib/
-│   ├── palette.ts       # Perler bead color data (generated by scripts/gen-palette.mjs)
-│   ├── color.ts         # sRGB → Lab, CIEDE2000, nearest-bead matcher
-│   ├── pattern.ts       # grid quantization + Floyd–Steinberg dithering
-│   └── render.ts        # canvas board renderer + PNG export
 ├── components/
-│   ├── PerlerStudio.tsx # the app (React island)
-│   └── ui/              # shadcn/ui components
-└── pages/
-    └── index.astro      # page shell
+│   ├── HomePage.astro        # Astro page shell and layout
+│   ├── PerlerStudio.tsx      # Main React island: upload, controls, preview, export
+│   └── ui/                   # shadcn/ui-style components
+├── i18n/
+│   └── ui.ts                 # English / Chinese UI text
+├── lib/
+│   ├── color.ts              # sRGB → Lab, CIEDE2000, nearest-bead matcher
+│   ├── palette.ts            # Bead brand and color palette data
+│   ├── pattern.ts            # ImageData → bead pattern, dithering, background cleanup
+│   ├── render.ts             # Canvas rendering and PNG export
+│   └── utils.ts              # Shared utility helpers
+├── pages/
+│   ├── index.astro           # English page
+│   ├── zh/index.astro        # Chinese page
+│   └── striner/perler/       # Legacy-compatible route aliases
+└── styles/
+    └── global.css            # Tailwind and theme variables
+
+docs/
+├── PRD.md                    # Product requirements
+└── TECH_DESIGN.md            # Technical design notes
 ```
 
-## 🧞 Development
+## Development
 
-| Command           | Action                                      |
-| :---------------- | :------------------------------------------ |
-| `npm install`     | Install dependencies                        |
-| `npm run dev`     | Start dev server at `localhost:4321`        |
-| `npm run build`   | Build the static site to `./dist/`          |
-| `npm run preview` | Preview the production build locally        |
+Requirements:
 
-## 🚀 Deploy
+- Node.js `>= 22.12.0`
+- npm
 
-This project is a **static Astro site**. It does not need a long-running Node.js
-backend in production. Build it once, upload/copy the generated `dist/` directory
-to your server, and let Nginx serve the static files.
+Commands:
 
-- **Build command:** `npm run build`
-- **Output directory:** `dist`
-- **Node version:** 22+
-- **Production path:** `/perler-striner/`
-- **GitHub Pages URL:** `https://striner.github.io/perler-striner/`
+| Command | Description |
+| :-- | :-- |
+| `npm install` | Install dependencies |
+| `npm run dev` | Start Astro dev server |
+| `npm run build` | Build static files into `dist/` |
+| `npm run preview` | Preview the production build locally |
 
-### 1. Build static files locally or on the server
-
-Run these commands in the project root:
+Local development:
 
 ```bash
 npm install
+npm run dev
+```
+
+Production build:
+
+```bash
 npm run build
 ```
 
-After the build succeeds, the generated static files are in:
+The static output is generated in:
 
 ```text
 dist/
 ```
 
-You can upload/copy this `dist/` directory to your Alibaba Cloud server and serve
-it with Nginx.
+## Deployment
 
-Optional: package the build output before uploading:
+### GitHub Pages
+
+This repository is configured for GitHub Pages through GitHub Actions.
+
+- Branch: `master`
+- Workflow: `.github/workflows/deploy.yml`
+- Build command: `npm run build`
+- Output directory: `dist`
+- Astro base path: `/perler-striner`
+- Public URL: <https://striner.github.io/perler-striner/>
+
+After pushing to `master`, the workflow builds and deploys the site automatically.
+
+### Static server / Nginx
+
+You can also deploy the static build to any server:
 
 ```bash
+npm install
+npm run build
 tar -czf perler-striner-dist.tar.gz dist
 ```
 
-On the server, extract it into your site directory, for example:
-
-```bash
-sudo mkdir -p /var/www/perler-striner
-sudo tar -xzf perler-striner-dist.tar.gz -C /var/www/perler-striner --strip-components=1
-```
-
-The final server directory should look like this:
-
-```text
-/var/www/perler-striner/
-├── _astro/
-├── zh/
-├── favicon.ico
-├── favicon.svg
-└── index.html
-```
-
-### 2. Install and enable Nginx
-
-Ubuntu / Debian:
-
-```bash
-sudo apt update
-sudo apt install nginx -y
-sudo systemctl start nginx
-sudo systemctl enable nginx
-```
-
-CentOS / Alibaba Cloud Linux:
-
-```bash
-sudo yum install nginx -y
-sudo systemctl start nginx
-sudo systemctl enable nginx
-```
-
-Check Nginx status:
-
-```bash
-sudo systemctl status nginx
-```
-
-### 3. Configure Nginx
-
-Create an Nginx config file:
-
-```bash
-sudo nano /etc/nginx/conf.d/perler-striner.conf
-```
-
-If you use a domain name, replace `your-domain.com` with your real domain:
+Example Nginx config:
 
 ```nginx
 server {
@@ -159,17 +251,6 @@ server {
     root /var/www/perler-striner;
     index index.html;
 
-    # Astro is built with base: /perler-striner.
-    # The HTML references assets like /perler-striner/_astro/*.css,
-    # while the build output stores them in /var/www/perler-striner/_astro/.
-    location /perler-striner/_astro/ {
-        alias /var/www/perler-striner/_astro/;
-        try_files $uri =404;
-        access_log off;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
     location /perler-striner/ {
         try_files $uri $uri/ /index.html;
     }
@@ -177,111 +258,30 @@ server {
     location = / {
         return 302 /perler-striner/;
     }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
 }
 ```
 
-If you do not have a domain yet and want to access the site with the server IP,
-use this instead:
-
-```nginx
-server {
-    listen 80;
-    server_name _;
-
-    root /var/www/perler-striner;
-    index index.html;
-
-    # Astro is built with base: /perler-striner.
-    # The HTML references assets like /perler-striner/_astro/*.css,
-    # while the build output stores them in /var/www/perler-striner/_astro/.
-    location /perler-striner/_astro/ {
-        alias /var/www/perler-striner/_astro/;
-        try_files $uri =404;
-        access_log off;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    location /perler-striner/ {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location = / {
-        return 302 /perler-striner/;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-Test and reload Nginx:
+Then reload Nginx:
 
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 4. Open Alibaba Cloud security group ports
+## Privacy
 
-In the Alibaba Cloud ECS security group, allow:
+The app is designed as a zero-backend static tool. Uploaded images are decoded
+and processed locally in the browser. They are not sent to a server by this app.
 
-```text
-80    HTTP
-443   HTTPS, if SSL is configured later
-22    SSH
-```
+## Acknowledgements
 
-### 5. Visit the site
+- Bead color references from [beadcolors](https://github.com/maxcleme/beadcolors)
+  and [bitbead.app](https://www.bitbead.app/en/colors).
+- Built with [Astro](https://astro.build), [React](https://react.dev),
+  [Tailwind CSS](https://tailwindcss.com), and shadcn/ui-style components.
 
-With a domain:
+## Notes
 
-```text
-http://your-domain.com/perler-striner/
-```
-
-With the server public IP:
-
-```text
-http://your-server-public-ip/perler-striner/
-```
-
-### 6. Update deployment after code changes
-
-Rebuild locally or on the server:
-
-```bash
-npm install
-npm run build
-```
-
-Then replace the Nginx site directory with the new build output:
-
-```bash
-sudo rm -rf /var/www/perler-striner/*
-sudo cp -R dist/* /var/www/perler-striner/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### Notes
-
-- Do **not** use `npm run dev` for production. It is only for local development.
-- This project does **not** need PM2 for production if it is served by Nginx as static files.
-- Nginx is configured with `systemctl enable nginx`, so it will start automatically after server reboot.
-
-
-## 🙏 Acknowledgements
-
-- Vibe-coded with [Claude Code](https://claude.com/claude-code), powered by Anthropic's **Claude Fable 5** — scaffolding, color science, rendering, i18n and all seven palette integrations
-- Bead color data: the [beadcolors](https://github.com/maxcleme/beadcolors) community dataset and the [bitbead.app](https://www.bitbead.app/en/colors) color charts
-- Built on [Astro](https://astro.build), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com)
-
-## 📝 Notes
-
-Perler® and MARD are trademarks of their respective owners. This is an unofficial fan-made tool. Perler color values come from the community-maintained [beadcolors](https://github.com/maxcleme/beadcolors) dataset; the MARD 221 chart comes from [bitbead.app](https://www.bitbead.app/en/colors/mard). Both are measured approximations of the physical beads. Refresh the palettes anytime with `node scripts/gen-palette.mjs`.
+Perler®, Hama, Artkal, MARD, and COCO are trademarks of their respective owners.
+This is an unofficial fan-made design tool. Color values are measured or
+community-provided approximations and may differ from physical beads.
