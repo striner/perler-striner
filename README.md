@@ -71,7 +71,8 @@ to your server, and let Nginx serve the static files.
 - **Build command:** `npm run build`
 - **Output directory:** `dist`
 - **Node version:** 22+
-- **Production path:** `/striner/perler/`
+- **Production path:** `/perler-striner/`
+- **GitHub Pages URL:** `https://striner.github.io/perler-striner/`
 
 ### 1. Build static files locally or on the server
 
@@ -94,22 +95,21 @@ it with Nginx.
 Optional: package the build output before uploading:
 
 ```bash
-tar -czf perler-studio-dist.tar.gz dist
+tar -czf perler-striner-dist.tar.gz dist
 ```
 
 On the server, extract it into your site directory, for example:
 
 ```bash
-sudo mkdir -p /var/www/perler-studio
-sudo tar -xzf perler-studio-dist.tar.gz -C /var/www/perler-studio --strip-components=1
+sudo mkdir -p /var/www/perler-striner
+sudo tar -xzf perler-striner-dist.tar.gz -C /var/www/perler-striner --strip-components=1
 ```
 
 The final server directory should look like this:
 
 ```text
-/var/www/perler-studio/
+/var/www/perler-striner/
 ├── _astro/
-├── striner/
 ├── zh/
 ├── favicon.ico
 ├── favicon.svg
@@ -146,7 +146,7 @@ sudo systemctl status nginx
 Create an Nginx config file:
 
 ```bash
-sudo nano /etc/nginx/conf.d/perler-studio.conf
+sudo nano /etc/nginx/conf.d/perler-striner.conf
 ```
 
 If you use a domain name, replace `your-domain.com` with your real domain:
@@ -156,26 +156,26 @@ server {
     listen 80;
     server_name your-domain.com;
 
-    root /var/www/perler-studio;
+    root /var/www/perler-striner;
     index index.html;
 
-    # Astro is built with base: /striner/perler.
-    # The HTML references assets like /striner/perler/_astro/*.css,
-    # while the build output stores them in /var/www/perler-studio/_astro/.
-    location /striner/perler/_astro/ {
-        alias /var/www/perler-studio/_astro/;
+    # Astro is built with base: /perler-striner.
+    # The HTML references assets like /perler-striner/_astro/*.css,
+    # while the build output stores them in /var/www/perler-striner/_astro/.
+    location /perler-striner/_astro/ {
+        alias /var/www/perler-striner/_astro/;
         try_files $uri =404;
         access_log off;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
-    location /striner/perler/ {
-        try_files $uri $uri/ /striner/perler/index.html;
+    location /perler-striner/ {
+        try_files $uri $uri/ /index.html;
     }
 
     location = / {
-        return 302 /striner/perler/;
+        return 302 /perler-striner/;
     }
 
     location / {
@@ -192,26 +192,26 @@ server {
     listen 80;
     server_name _;
 
-    root /var/www/perler-studio;
+    root /var/www/perler-striner;
     index index.html;
 
-    # Astro is built with base: /striner/perler.
-    # The HTML references assets like /striner/perler/_astro/*.css,
-    # while the build output stores them in /var/www/perler-studio/_astro/.
-    location /striner/perler/_astro/ {
-        alias /var/www/perler-studio/_astro/;
+    # Astro is built with base: /perler-striner.
+    # The HTML references assets like /perler-striner/_astro/*.css,
+    # while the build output stores them in /var/www/perler-striner/_astro/.
+    location /perler-striner/_astro/ {
+        alias /var/www/perler-striner/_astro/;
         try_files $uri =404;
         access_log off;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
-    location /striner/perler/ {
-        try_files $uri $uri/ /striner/perler/index.html;
+    location /perler-striner/ {
+        try_files $uri $uri/ /index.html;
     }
 
     location = / {
-        return 302 /striner/perler/;
+        return 302 /perler-striner/;
     }
 
     location / {
@@ -242,13 +242,13 @@ In the Alibaba Cloud ECS security group, allow:
 With a domain:
 
 ```text
-http://your-domain.com/striner/perler/
+http://your-domain.com/perler-striner/
 ```
 
 With the server public IP:
 
 ```text
-http://your-server-public-ip/striner/perler/
+http://your-server-public-ip/perler-striner/
 ```
 
 ### 6. Update deployment after code changes
@@ -263,8 +263,8 @@ npm run build
 Then replace the Nginx site directory with the new build output:
 
 ```bash
-sudo rm -rf /var/www/perler-studio/*
-sudo cp -R dist/* /var/www/perler-studio/
+sudo rm -rf /var/www/perler-striner/*
+sudo cp -R dist/* /var/www/perler-striner/
 sudo nginx -t
 sudo systemctl reload nginx
 ```

@@ -34,11 +34,6 @@ jobs:
       - name: Build static site
         run: npm run build
 
-      - name: Prepare assets for user-site path
-        run: |
-          mkdir -p dist/striner/perler/_astro
-          cp -R dist/_astro/* dist/striner/perler/_astro/
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

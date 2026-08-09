@@ -8,7 +8,7 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   integrations: [react()],
 
-  base: '/striner/perler',
+  base: '/perler-striner',
 
   server: {
     host: '0.0.0.0',
