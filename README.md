@@ -29,6 +29,53 @@ not uploaded to a backend service.
 - Export a printable PNG containing the pattern and the color legend.
 - Support English and Chinese pages.
 
+## Pattern settings
+
+The main panel exposes the most important generation controls:
+
+| Setting | Description |
+| :-- | :-- |
+| Bead brand | Choose the target bead palette. The same image can produce different results with different real-world color systems. |
+| Width in beads | Controls the horizontal bead count. The height is calculated from the original image aspect ratio. |
+| Zoom | Changes the preview cell size only. It does not change the generated pattern data. |
+| Dithering | Enables Floyd–Steinberg error diffusion for smoother gradients and photo-like results. |
+| Remove background | Removes border-connected background regions before color matching. Turn it on for product photos, logos, white/solid backgrounds, or lightly varied backgrounds. Turn it off when you want the full rectangular image, including the background, to become beads. |
+| Grid & pegboard lines | Shows or hides construction guides in the preview. Exported PNGs always keep printable guide information. |
+
+### Background removal behavior
+
+`Remove background` is designed for common craft-design inputs where the main
+subject is visually separated from the surrounding background. When enabled, the
+app:
+
+1. Samples pixels along the image border.
+2. Estimates the dominant border background color.
+3. Computes a tolerance for small variations, shadows, and soft gradients.
+4. Flood-fills only background-like pixels connected to the image border.
+5. Marks those cells as empty pegs.
+
+This means internal subject details are preserved if they are not connected to
+the border background. For example, white details inside a character or object
+should not be removed just because the outer background is white.
+
+Best suited for:
+
+- transparent PNGs,
+- white or light-gray backgrounds,
+- solid color backgrounds,
+- simple product-photo backgrounds,
+- softly varying backgrounds with limited color changes.
+
+Less suited for:
+
+- busy natural scenes,
+- backgrounds with colors very close to the subject,
+- subjects touching the image border,
+- cases that require semantic AI segmentation.
+
+For difficult images, clean the background manually first or disable this option
+to keep the full image.
+
 ## Supported color palettes
 
 | System | Colors | Bead size | Example codes | Data source |
@@ -67,6 +114,7 @@ The core conversion pipeline is:
 Upload image
 → Decode image in the browser
 → Downsample the image to a bead grid
+→ Optionally remove border-connected background regions
 → Convert each grid pixel to a bead color
 → Optionally diffuse color error with dithering
 → Build bead-count statistics
