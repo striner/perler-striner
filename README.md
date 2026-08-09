@@ -275,6 +275,10 @@ and processed locally in the browser. They are not sent to a server by this app.
 
 ## Acknowledgements
 
+- This project was built with reference to the original Perler Studio code and
+  implementation ideas by [real-jiakai](https://github.com/real-jiakai). Thanks
+  for the inspiration around the browser-first bead-pattern workflow, palette
+  integration, color matching, rendering, and export experience.
 - Bead color references from [beadcolors](https://github.com/maxcleme/beadcolors)
   and [bitbead.app](https://www.bitbead.app/en/colors).
 - Built with [Astro](https://astro.build), [React](https://react.dev),
