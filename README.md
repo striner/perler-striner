@@ -22,7 +22,7 @@ not uploaded to a backend service.
 - Match image colors to real bead colors using CIE Lab + CIEDE2000 perceptual distance.
 - Toggle Floyd–Steinberg dithering for smoother photo-like gradients.
 - Treat transparent pixels as empty pegs.
-- Remove near-white border-connected backgrounds automatically.
+- Optionally remove border-connected backgrounds before generating the bead pattern.
 - Show grid lines, coordinate labels, and pegboard-friendly guides.
 - Calculate bead counts and generate a shopping list sorted by quantity.
 - Click a color in the shopping list to highlight its positions on the pattern.
@@ -92,15 +92,20 @@ aliasing.
 ### 2. Transparent pixels and background cleanup
 
 Pixels with alpha below the threshold are treated as empty cells. For images with
-a white background, the generator also performs a border-connected near-white
+a removable background, the generator can perform a border-connected background
 cleanup:
 
 - Start from the image borders.
-- Find near-white pixels connected to the border.
+- Estimate the dominant background color from border pixels.
+- Find background-like pixels connected to the border.
 - Mark those cells as empty.
-- Preserve internal white details that are not connected to the border.
+- Preserve internal details that are not connected to the border.
 
-This is useful for logos, cut-out PNGs, and product photos on white backgrounds.
+This works well for transparent PNGs, white backgrounds, light gray backgrounds,
+and many solid or softly varying background colors. It is still a lightweight
+browser-side heuristic, not an AI segmentation model, so very complex backgrounds
+or subjects with colors close to the background may still need manual cleanup in
+the source image.
 
 ### 3. Perceptual color matching
 

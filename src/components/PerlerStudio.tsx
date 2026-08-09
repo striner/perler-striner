@@ -137,6 +137,7 @@ export default function PerlerStudio({
   const [brand, setBrand] = useState<BrandId>("mard221");
   const [beadsAcross, setBeadsAcross] = useState(DEFAULT_BEADS);
   const [dither, setDither] = useState(false);
+  const [removeBackground, setRemoveBackground] = useState(true);
   const [grid, setGrid] = useState(true);
   const [cell, setCell] = useState(14);
   const [highlight, setHighlight] = useState<number | null>(null);
@@ -176,14 +177,20 @@ export default function PerlerStudio({
     );
     const id = requestAnimationFrame(() => {
       try {
-        setPattern(generatePattern(downsample(source, w, h), { dither, brand }));
+        setPattern(
+          generatePattern(downsample(source, w, h), {
+            dither,
+            brand,
+            removeWhiteBackground: removeBackground,
+          })
+        );
       } catch (error) {
         console.error("Failed to generate bead pattern", error);
         setPattern(null);
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [source, beadsAcross, dither, brand]);
+  }, [source, beadsAcross, dither, brand, removeBackground]);
 
   // Paint the visible canvas.
   useEffect(() => {
@@ -363,6 +370,14 @@ export default function PerlerStudio({
                 id="dither"
                 checked={dither}
                 onCheckedChange={setDither}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="remove-background">{t.removeBackground}</Label>
+              <Switch
+                id="remove-background"
+                checked={removeBackground}
+                onCheckedChange={setRemoveBackground}
               />
             </div>
             <div className="flex items-center justify-between">

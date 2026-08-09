@@ -19,6 +19,13 @@ export interface PatternOptions {
   removeWhiteBackground?: boolean;
 }
 
+type BackgroundSample = {
+  r: number;
+  g: number;
+  b: number;
+  tolerance: number;
+};
+
 /**
  * Quantize a grid-sized ImageData to a brand's bead palette.
  * With dithering enabled, Floyd–Steinberg error diffusion runs over the
@@ -54,7 +61,7 @@ export function generatePattern(
   }
 
   if (removeWhiteBackground) {
-    removeBorderWhite(solid, buf, width, height, whiteThreshold);
+    removeBorderBackground(solid, buf, width, height, whiteThreshold);
   }
 
   for (let y = 0; y < height; y++) {
@@ -167,32 +174,169 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   ];
 }
 
-function isNearWhite(
-  buf: Float32Array,
-  i: number,
-  whiteThreshold: number
-): boolean {
+function pixelAt(buf: Float32Array, i: number): [number, number, number] {
   const r = buf[i * 3]!;
   const g = buf[i * 3 + 1]!;
   const b = buf[i * 3 + 2]!;
+  return [r, g, b];
+}
+
+function colorDistance2(
+  r1: number,
+  g1: number,
+  b1: number,
+  r2: number,
+  g2: number,
+  b2: number
+): number {
+  const dr = r1 - r2;
+  const dg = g1 - g2;
+  const db = b1 - b2;
+  return dr * dr + dg * dg + db * db;
+}
+
+function isNearWhite(r: number, g: number, b: number, whiteThreshold: number): boolean {
   return (
     Math.min(r, g, b) >= whiteThreshold &&
-    Math.max(r, g, b) - Math.min(r, g, b) <= 12
+    Math.max(r, g, b) - Math.min(r, g, b) <= 16
   );
 }
 
-function removeBorderWhite(
+function collectBorderSamples(
+  solid: Uint8Array,
+  buf: Float32Array,
+  width: number,
+  height: number
+): [number, number, number][] {
+  const samples: [number, number, number][] = [];
+  const add = (x: number, y: number) => {
+    const i = y * width + x;
+    if (!solid[i]) return;
+    samples.push(pixelAt(buf, i));
+  };
+
+  for (let x = 0; x < width; x++) {
+    add(x, 0);
+    if (height > 1) add(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y++) {
+    add(0, y);
+    if (width > 1) add(width - 1, y);
+  }
+  return samples;
+}
+
+function estimateBackground(
+  solid: Uint8Array,
+  buf: Float32Array,
+  width: number,
+  height: number,
+  whiteThreshold: number
+): BackgroundSample | null {
+  const samples = collectBorderSamples(solid, buf, width, height);
+  if (!samples.length) return null;
+
+  const nearWhite = samples.filter(([r, g, b]) =>
+    isNearWhite(r, g, b, whiteThreshold)
+  );
+  const source = nearWhite.length >= Math.max(4, samples.length * 0.12)
+    ? nearWhite
+    : dominantColorCluster(samples);
+
+  const sortedR = source.map(([r]) => r).sort((a, b) => a - b);
+  const sortedG = source.map(([, g]) => g).sort((a, b) => a - b);
+  const sortedB = source.map(([, , b]) => b).sort((a, b) => a - b);
+  const mid = Math.floor(source.length / 2);
+  const r = sortedR[mid]!;
+  const g = sortedG[mid]!;
+  const b = sortedB[mid]!;
+
+  const distances = source
+    .map(([sr, sg, sb]) => Math.sqrt(colorDistance2(sr, sg, sb, r, g, b)))
+    .sort((a, b) => a - b);
+  const p75 = distances[Math.floor(distances.length * 0.75)] ?? 0;
+  const p90 = distances[Math.floor(distances.length * 0.9)] ?? p75;
+  const baseTolerance = nearWhite.length ? 34 : 26;
+  const tolerance = Math.max(baseTolerance, Math.min(72, p75 * 1.8 + p90 * 0.35 + 18));
+
+  return { r, g, b, tolerance };
+}
+
+function dominantColorCluster(
+  samples: [number, number, number][]
+): [number, number, number][] {
+  const bucketSize = 24;
+  const buckets = new Map<string, { count: number; r: number; g: number; b: number }>();
+
+  for (const [r, g, b] of samples) {
+    const key = [
+      Math.round(r / bucketSize),
+      Math.round(g / bucketSize),
+      Math.round(b / bucketSize),
+    ].join(",");
+    const bucket = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 };
+    bucket.count++;
+    bucket.r += r;
+    bucket.g += g;
+    bucket.b += b;
+    buckets.set(key, bucket);
+  }
+
+  let best = null as { count: number; r: number; g: number; b: number } | null;
+  for (const bucket of buckets.values()) {
+    if (!best || bucket.count > best.count) best = bucket;
+  }
+  if (!best) return samples;
+
+  const cr = best.r / best.count;
+  const cg = best.g / best.count;
+  const cb = best.b / best.count;
+  const cluster = samples.filter(
+    ([r, g, b]) => Math.sqrt(colorDistance2(r, g, b, cr, cg, cb)) <= 52
+  );
+
+  return cluster.length >= Math.max(3, samples.length * 0.08) ? cluster : samples;
+}
+
+function isBackgroundPixel(
+  buf: Float32Array,
+  i: number,
+  bg: BackgroundSample,
+  whiteThreshold: number
+): boolean {
+  const [r, g, b] = pixelAt(buf, i);
+  if (isNearWhite(r, g, b, whiteThreshold)) return true;
+
+  const dist = Math.sqrt(colorDistance2(r, g, b, bg.r, bg.g, bg.b));
+  if (dist <= bg.tolerance) return true;
+
+  const pixelChroma = Math.max(r, g, b) - Math.min(r, g, b);
+  const bgChroma = Math.max(bg.r, bg.g, bg.b) - Math.min(bg.r, bg.g, bg.b);
+  const pixelLuma = (r + g + b) / 3;
+  const bgLuma = (bg.r + bg.g + bg.b) / 3;
+
+  return (
+    bgChroma <= 24 &&
+    pixelChroma <= 30 &&
+    Math.abs(pixelLuma - bgLuma) <= bg.tolerance * 0.9
+  );
+}
+
+function removeBorderBackground(
   solid: Uint8Array,
   buf: Float32Array,
   width: number,
   height: number,
   whiteThreshold: number
 ): void {
+  const bg = estimateBackground(solid, buf, width, height, whiteThreshold);
+  if (!bg) return;
+
   const queue: number[] = [];
   const pushIfBackground = (x: number, y: number) => {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
     const i = y * width + x;
-    if (!solid[i] || !isNearWhite(buf, i, whiteThreshold)) return;
+    if (!solid[i] || !isBackgroundPixel(buf, i, bg, whiteThreshold)) return;
     solid[i] = 0;
     queue.push(i);
   };

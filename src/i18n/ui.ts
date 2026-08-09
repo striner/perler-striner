@@ -27,6 +27,7 @@ const en = {
   widthBeads: "Width in beads",
   zoom: "Zoom",
   dithering: "Dithering",
+  removeBackground: "Remove background",
   gridLines: "Grid & pegboard lines",
   download: "Download pattern PNG",
 
@@ -69,6 +70,7 @@ const zh: Dict = {
   widthBeads: "宽度（豆数）",
   zoom: "缩放",
   dithering: "仿色（抖动）",
+  removeBackground: "去掉背景",
   gridLines: "网格与拼板参考线",
   download: "下载图纸 PNG",
 
