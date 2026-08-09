@@ -39,7 +39,7 @@ The main panel exposes the most important generation controls:
 | Width in beads | Controls the horizontal bead count. The height is calculated from the original image aspect ratio. |
 | Zoom | Changes the preview cell size only. It does not change the generated pattern data. |
 | Dithering | Enables Floyd–Steinberg error diffusion for smoother gradients and photo-like results. |
-| Remove background | Removes border-connected background regions before color matching. Turn it on for product photos, logos, white/solid backgrounds, or lightly varied backgrounds. Turn it off when you want the full rectangular image, including the background, to become beads. |
+| Remove background | Estimates and protects the main subject first, then removes border-connected background regions before color matching. Turn it on for product photos, portraits, logos, white/solid backgrounds, or lightly varied backgrounds. Turn it off when you want the full rectangular image, including the background, to become beads. |
 | Grid & pegboard lines | Shows or hides construction guides in the preview. Exported PNGs always keep printable guide information. |
 
 ### Background removal behavior
@@ -49,10 +49,14 @@ subject is visually separated from the surrounding background. When enabled, the
 app:
 
 1. Samples pixels along the image border.
-2. Estimates the dominant border background color.
-3. Computes a tolerance for small variations, shadows, and soft gradients.
-4. Flood-fills only background-like pixels connected to the image border.
-5. Marks those cells as empty pegs.
+2. Estimates several likely border background color clusters.
+3. Detects subject candidates from pixels that differ from those background
+   clusters and from strong local color edges.
+4. Keeps larger/central subject components, expands that mask slightly, and fills
+   protected holes inside the subject region.
+5. Flood-fills from the image border and removes only areas outside the protected
+   subject mask.
+6. Marks removed background cells as empty pegs.
 
 This means internal subject details are preserved if they are not connected to
 the border background. For example, white details inside a character or object

@@ -28,6 +28,8 @@ const en = {
   zoom: "Zoom",
   dithering: "Dithering",
   removeBackground: "Remove background",
+  removeBackgroundDesc:
+    "Protect the main subject first, then clear border-connected background.",
   gridLines: "Grid & pegboard lines",
   download: "Download pattern PNG",
 
@@ -71,6 +73,7 @@ const zh: Dict = {
   zoom: "缩放",
   dithering: "仿色（抖动）",
   removeBackground: "去掉背景",
+  removeBackgroundDesc: "先保护主体轮廓，再清除与边缘连通的背景。",
   gridLines: "网格与拼板参考线",
   download: "下载图纸 PNG",
 

@@ -24,6 +24,7 @@ type BackgroundSample = {
   g: number;
   b: number;
   tolerance: number;
+  weight?: number;
 };
 
 /**
@@ -262,6 +263,57 @@ function estimateBackground(
   return { r, g, b, tolerance };
 }
 
+function estimateBackgroundClusters(
+  solid: Uint8Array,
+  buf: Float32Array,
+  width: number,
+  height: number,
+  whiteThreshold: number
+): BackgroundSample[] {
+  const samples = collectBorderSamples(solid, buf, width, height);
+  if (!samples.length) return [];
+
+  const bucketSize = 28;
+  const buckets = new Map<string, { count: number; r: number; g: number; b: number }>();
+  for (const [r, g, b] of samples) {
+    const key = [
+      Math.round(r / bucketSize),
+      Math.round(g / bucketSize),
+      Math.round(b / bucketSize),
+    ].join(",");
+    const bucket = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 };
+    bucket.count++;
+    bucket.r += r;
+    bucket.g += g;
+    bucket.b += b;
+    buckets.set(key, bucket);
+  }
+
+  const clusters = [...buckets.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6)
+    .map((bucket) => {
+      const r = bucket.r / bucket.count;
+      const g = bucket.g / bucket.count;
+      const b = bucket.b / bucket.count;
+      const isWhite = isNearWhite(r, g, b, whiteThreshold);
+      return {
+        r,
+        g,
+        b,
+        tolerance: isWhite ? 58 : 48,
+        weight: bucket.count / samples.length,
+      };
+    });
+
+  const white = estimateBackground(solid, buf, width, height, whiteThreshold);
+  if (white && isNearWhite(white.r, white.g, white.b, whiteThreshold)) {
+    clusters.unshift({ ...white, tolerance: Math.max(white.tolerance, 58) });
+  }
+
+  return clusters;
+}
+
 function dominantColorCluster(
   samples: [number, number, number][]
 ): [number, number, number][] {
@@ -322,6 +374,204 @@ function isBackgroundPixel(
   );
 }
 
+function isBackgroundLike(
+  buf: Float32Array,
+  i: number,
+  clusters: BackgroundSample[],
+  whiteThreshold: number
+): boolean {
+  const [r, g, b] = pixelAt(buf, i);
+  if (isNearWhite(r, g, b, whiteThreshold)) return true;
+
+  for (const bg of clusters) {
+    if (isBackgroundPixel(buf, i, bg, whiteThreshold)) return true;
+  }
+  return false;
+}
+
+function localEdgeStrength(
+  buf: Float32Array,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): number {
+  const i = y * width + x;
+  const [r, g, b] = pixelAt(buf, i);
+  let best = 0;
+  const check = (xx: number, yy: number) => {
+    if (xx < 0 || xx >= width || yy < 0 || yy >= height) return;
+    const j = yy * width + xx;
+    const [nr, ng, nb] = pixelAt(buf, j);
+    best = Math.max(best, Math.sqrt(colorDistance2(r, g, b, nr, ng, nb)));
+  };
+  check(x - 1, y);
+  check(x + 1, y);
+  check(x, y - 1);
+  check(x, y + 1);
+  return best;
+}
+
+function buildSubjectProtectionMask(
+  solid: Uint8Array,
+  buf: Float32Array,
+  width: number,
+  height: number,
+  whiteThreshold: number
+): Uint8Array {
+  const n = width * height;
+  const clusters = estimateBackgroundClusters(solid, buf, width, height, whiteThreshold);
+  if (!clusters.length) return new Uint8Array(n);
+
+  const seed = new Uint8Array(n);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (!solid[i]) continue;
+      const [r, g, b] = pixelAt(buf, i);
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      const bgLike = isBackgroundLike(buf, i, clusters, whiteThreshold);
+      const edge = localEdgeStrength(buf, x, y, width, height);
+      if (!bgLike || (edge >= 46 && chroma >= 18)) {
+        seed[i] = 1;
+      }
+    }
+  }
+
+  const keep = keepSubjectComponents(seed, width, height);
+  const radius = Math.max(2, Math.round(Math.min(width, height) * 0.045));
+  const protectedMask = dilateMask(keep, width, height, radius);
+  fillProtectedHoles(protectedMask, solid, width, height);
+  return protectedMask;
+}
+
+function keepSubjectComponents(
+  seed: Uint8Array,
+  width: number,
+  height: number
+): Uint8Array {
+  const n = width * height;
+  const visited = new Uint8Array(n);
+  const keep = new Uint8Array(n);
+  const minArea = Math.max(6, Math.round(n * 0.0025));
+  const centerX = (width - 1) / 2;
+  const centerY = (height - 1) / 2;
+  const maxCenterDistance = Math.hypot(width, height) * 0.42;
+
+  for (let start = 0; start < n; start++) {
+    if (!seed[start] || visited[start]) continue;
+    const queue = [start];
+    const component: number[] = [];
+    visited[start] = 1;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+
+    for (let qi = 0; qi < queue.length; qi++) {
+      const i = queue[qi]!;
+      component.push(i);
+      const x = i % width;
+      const y = Math.floor(i / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+
+      const push = (xx: number, yy: number) => {
+        if (xx < 0 || xx >= width || yy < 0 || yy >= height) return;
+        const j = yy * width + xx;
+        if (!seed[j] || visited[j]) return;
+        visited[j] = 1;
+        queue.push(j);
+      };
+      push(x + 1, y);
+      push(x - 1, y);
+      push(x, y + 1);
+      push(x, y - 1);
+    }
+
+    const area = component.length;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const nearCenter = Math.hypot(cx - centerX, cy - centerY) <= maxCenterDistance;
+    const tallOrWide = maxX - minX >= width * 0.08 || maxY - minY >= height * 0.08;
+    const shouldKeep = area >= minArea && (nearCenter || area >= n * 0.012 || tallOrWide);
+    if (!shouldKeep) continue;
+
+    for (const i of component) keep[i] = 1;
+  }
+
+  return keep;
+}
+
+function dilateMask(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  radius: number
+): Uint8Array {
+  const out = new Uint8Array(mask);
+  const r2 = radius * radius;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (!mask[i]) continue;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (dx * dx + dy * dy > r2) continue;
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+          out[yy * width + xx] = 1;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function fillProtectedHoles(
+  protectedMask: Uint8Array,
+  solid: Uint8Array,
+  width: number,
+  height: number
+): void {
+  const n = width * height;
+  const outside = new Uint8Array(n);
+  const queue: number[] = [];
+  const push = (x: number, y: number) => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const i = y * width + x;
+    if (!solid[i] || protectedMask[i] || outside[i]) return;
+    outside[i] = 1;
+    queue.push(i);
+  };
+
+  for (let x = 0; x < width; x++) {
+    push(x, 0);
+    push(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y++) {
+    push(0, y);
+    push(width - 1, y);
+  }
+
+  for (let qi = 0; qi < queue.length; qi++) {
+    const i = queue[qi]!;
+    const x = i % width;
+    const y = Math.floor(i / width);
+    push(x + 1, y);
+    push(x - 1, y);
+    push(x, y + 1);
+    push(x, y - 1);
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (solid[i] && !outside[i]) protectedMask[i] = 1;
+  }
+}
+
 function removeBorderBackground(
   solid: Uint8Array,
   buf: Float32Array,
@@ -332,11 +582,29 @@ function removeBorderBackground(
   const bg = estimateBackground(solid, buf, width, height, whiteThreshold);
   if (!bg) return;
 
+  const protectedMask = buildSubjectProtectionMask(
+    solid,
+    buf,
+    width,
+    height,
+    whiteThreshold
+  );
+  const protectedCount = protectedMask.reduce((sum, v) => sum + v, 0);
+  const solidCount = solid.reduce((sum, v) => sum + v, 0);
+  const useSubjectBarrier =
+    protectedCount >= Math.max(8, solidCount * 0.025) &&
+    protectedCount <= solidCount * 0.82;
+
   const queue: number[] = [];
   const pushIfBackground = (x: number, y: number) => {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
     const i = y * width + x;
-    if (!solid[i] || !isBackgroundPixel(buf, i, bg, whiteThreshold)) return;
+    if (!solid[i]) return;
+    if (useSubjectBarrier) {
+      if (protectedMask[i]) return;
+    } else if (!isBackgroundPixel(buf, i, bg, whiteThreshold)) {
+      return;
+    }
     solid[i] = 0;
     queue.push(i);
   };

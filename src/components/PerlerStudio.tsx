@@ -372,13 +372,18 @@ export default function PerlerStudio({
                 onCheckedChange={setDither}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="remove-background">{t.removeBackground}</Label>
-              <Switch
-                id="remove-background"
-                checked={removeBackground}
-                onCheckedChange={setRemoveBackground}
-              />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="remove-background">{t.removeBackground}</Label>
+                <Switch
+                  id="remove-background"
+                  checked={removeBackground}
+                  onCheckedChange={setRemoveBackground}
+                />
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t.removeBackgroundDesc}
+              </p>
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="grid">{t.gridLines}</Label>
