@@ -20,8 +20,10 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ui, type Locale } from "@/i18n/ui";
+import { type RgbaGrid } from "@/lib/grid";
 import { BRANDS, type BrandId } from "@/lib/palette";
 import { generatePattern, type Pattern } from "@/lib/pattern";
+import { acquireGrid, readProcessorConfig } from "@/lib/processor-client";
 import { patternRenderSize, renderExport, renderPattern } from "@/lib/render";
 
 interface Source {
@@ -30,35 +32,12 @@ interface Source {
   height: number;
   name: string;
   thumb: string;
+  file: File | null;
 }
 
 const MAX_BEADS = 150;
 const DEFAULT_BEADS = 87;
-
-/** Downscale in halving steps so small grids keep detail instead of aliasing. */
-function downsample(src: Source, w: number, h: number): ImageData {
-  let img: CanvasImageSource = src.image;
-  let sw = src.width;
-  let sh = src.height;
-  while (sw / 2 >= w * 2 && sh / 2 >= h * 2) {
-    const c = document.createElement("canvas");
-    c.width = Math.round(sw / 2);
-    c.height = Math.round(sh / 2);
-    const cx = c.getContext("2d")!;
-    cx.imageSmoothingQuality = "high";
-    cx.drawImage(img, 0, 0, c.width, c.height);
-    img = c;
-    sw = c.width;
-    sh = c.height;
-  }
-  const out = document.createElement("canvas");
-  out.width = w;
-  out.height = h;
-  const ctx = out.getContext("2d", { willReadFrequently: true })!;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, 0, 0, w, h);
-  return ctx.getImageData(0, 0, w, h);
-}
+const PROCESSOR_CONFIG = readProcessorConfig(import.meta.env);
 
 // Built-in sample: a little pixel heart so the app demos without an upload.
 const HEART = [
@@ -124,6 +103,7 @@ function makeSample(): Source {
     height: c.height,
     name: "sample-heart",
     thumb: c.toDataURL(),
+    file: null,
   };
 }
 
@@ -137,14 +117,15 @@ export default function PerlerStudio({
   const [brand, setBrand] = useState<BrandId>("mard221");
   const [beadsAcross, setBeadsAcross] = useState(DEFAULT_BEADS);
   const [dither, setDither] = useState(false);
-  const [removeBackground, setRemoveBackground] = useState(true);
   const [grid, setGrid] = useState(true);
   const [cell, setCell] = useState(14);
   const [highlight, setHighlight] = useState<number | null>(null);
+  const [gridImage, setGridImage] = useState<RgbaGrid | null>(null);
   const [pattern, setPattern] = useState<Pattern | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const requestIdRef = useRef(0);
   const fileInputId = useId();
 
   const loadFile = useCallback(async (file: File) => {
@@ -159,6 +140,7 @@ export default function PerlerStudio({
           height: bmp.height,
           name: file.name.replace(/\.[^.]+$/, ""),
           thumb: URL.createObjectURL(file),
+          file,
         };
       });
       setHighlight(null);
@@ -167,30 +149,55 @@ export default function PerlerStudio({
     }
   }, []);
 
-  // Recompute the pattern whenever the source or knobs change.
+  // Acquire a processed grid from the backend, with the browser processor as fallback.
   useEffect(() => {
-    if (!source) return;
+    if (!source) {
+      setGridImage(null);
+      setPattern(null);
+      return;
+    }
     const w = Math.min(beadsAcross, MAX_BEADS);
     const h = Math.max(
       1,
       Math.min(MAX_BEADS, Math.round((w * source.height) / source.width))
     );
-    const id = requestAnimationFrame(() => {
+    const requestId = ++requestIdRef.current;
+    const controller = new AbortController();
+    setGridImage(null);
+    setPattern(null);
+    void acquireGrid({
+      source,
+      file: source.file,
+      width: w,
+      height: h,
+      config: PROCESSOR_CONFIG,
+      signal: controller.signal,
+    }).then((result) => {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) {
+        setGridImage(result);
+      }
+    }).catch((error) => {
+      if (!controller.signal.aborted) {
+        console.error("Failed to prepare image grid", error);
+        setGridImage(null);
+      }
+    });
+    return () => controller.abort();
+  }, [source, beadsAcross]);
+
+  // Palette matching and dithering remain entirely in the frontend.
+  useEffect(() => {
+    if (!gridImage) return;
+    const frame = requestAnimationFrame(() => {
       try {
-        setPattern(
-          generatePattern(downsample(source, w, h), {
-            dither,
-            brand,
-            removeWhiteBackground: removeBackground,
-          })
-        );
+        setPattern(generatePattern(gridImage, { dither, brand }));
       } catch (error) {
         console.error("Failed to generate bead pattern", error);
         setPattern(null);
       }
     });
-    return () => cancelAnimationFrame(id);
-  }, [source, beadsAcross, dither, brand, removeBackground]);
+    return () => cancelAnimationFrame(frame);
+  }, [gridImage, dither, brand]);
 
   // Paint the visible canvas.
   useEffect(() => {
@@ -371,19 +378,6 @@ export default function PerlerStudio({
                 checked={dither}
                 onCheckedChange={setDither}
               />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="remove-background">{t.removeBackground}</Label>
-                <Switch
-                  id="remove-background"
-                  checked={removeBackground}
-                  onCheckedChange={setRemoveBackground}
-                />
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {t.removeBackgroundDesc}
-              </p>
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="grid">{t.gridLines}</Label>

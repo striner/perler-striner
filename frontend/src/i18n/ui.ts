@@ -8,7 +8,7 @@ const en = {
     "Turn any image into a fuse-bead pattern with 7 bead-accurate color systems (Perler, MARD, COCO, Hama, Artkal), pegboard grids and a bead shopping list.",
   subtitle: "Turn any image into a fuse-bead pattern",
   footer:
-    "Everything runs in your browser — images never leave your device. 7 complete color systems: Perler (103), MARD 221 & 291, COCO 291, Hama, Artkal S and Artkal Mini — 1,392 colors in total. Standard pegboards are 29×29 pegs; midi beads are 5 mm, mini beads 2.6 mm.",
+    "When a processor is configured, uploads are sent to it first and fall back to browser processing if unavailable. 7 complete color systems: Perler (103), MARD 221 & 291, COCO 291, Hama, Artkal S and Artkal Mini — 1,392 colors in total. Standard pegboards are 29×29 pegs; midi beads are 5 mm, mini beads 2.6 mm.",
   switchLabel: "中文",
   switchHref: "/perler-striner/zh/",
   switchLang: "zh",
@@ -27,9 +27,6 @@ const en = {
   widthBeads: "Width in beads",
   zoom: "Zoom",
   dithering: "Dithering",
-  removeBackground: "Remove background",
-  removeBackgroundDesc:
-    "Protect the main subject first, then clear border-connected background.",
   gridLines: "Grid & pegboard lines",
   download: "Download pattern PNG",
 
@@ -52,10 +49,10 @@ export type Dict = typeof en;
 const zh: Dict = {
   title: "striner Perler — 拼豆图纸生成器",
   metaDesc:
-    "把任意图片变成拼豆图纸：支持 Perler、MARD 221/291、COCO 291、Hama、Artkal 共 7 套色卡精准配色，含拼板网格和配豆清单，全部在浏览器本地完成。",
+    "把任意图片变成拼豆图纸：支持 Perler、MARD 221/291、COCO 291、Hama、Artkal 共 7 套色卡精准配色，含拼板网格和配豆清单。",
   subtitle: "把任意图片变成拼豆图纸",
   footer:
-    "所有处理都在你的浏览器中完成——图片不会上传。支持 7 套完整色卡：Perler（103 色）、MARD 221 与 291、COCO 291、Hama、Artkal 中豆与 Artkal Mini，共 1,392 色。标准拼板为 29×29 孔；中豆直径 5 毫米，小豆 2.6 毫米。",
+    "配置处理服务后，图片会优先上传；服务不可用时自动回退到浏览器处理。支持 7 套完整色卡：Perler（103 色）、MARD 221 与 291、COCO 291、Hama、Artkal 中豆与 Artkal Mini，共 1,392 色。标准拼板为 29×29 孔；中豆直径 5 毫米，小豆 2.6 毫米。",
   switchLabel: "English",
   switchHref: "/perler-striner/",
   switchLang: "en",
@@ -72,8 +69,6 @@ const zh: Dict = {
   widthBeads: "宽度（豆数）",
   zoom: "缩放",
   dithering: "仿色（抖动）",
-  removeBackground: "去掉背景",
-  removeBackgroundDesc: "先保护主体轮廓，再清除与边缘连通的背景。",
   gridLines: "网格与拼板参考线",
   download: "下载图纸 PNG",
 

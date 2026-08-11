@@ -4,12 +4,12 @@
 
 本方案目标是说明当前图片转拼豆图工具的技术实现方式，并为后续功能扩展提供结构参考。
 
-当前阶段采用纯前端方案：
+当前工程包含静态前端和独立 Python 后端两个子项目：
 
-- 不需要后端服务。
-- 图片只在浏览器本地处理。
-- 通过 Canvas 完成图片读取、缩放、渲染和导出。
-- 通过拼豆色卡将图片颜色映射到真实拼豆颜色。
+- 前端优先请求后端生成目标尺寸、已移除背景的 RGBA 格子图，失败时自动使用 Canvas 本地回退。
+- 后端采用 FastAPI + BentoML，本次只提供多算法、并发和 GPU 服务接入框架，不包含生产图片算法。
+- 色板匹配、抖动、统计、渲染和导出仍由前端完成。
+- 后端未配置或不可用时，静态前端仍可独立使用。
 
 ## 2. 技术选型
 
@@ -20,6 +20,8 @@
 | 样式 | Tailwind CSS |
 | UI 组件 | shadcn/ui 风格组件 |
 | 图片处理 | Canvas / ImageData |
+| 后端接入 | FastAPI |
+| 模型服务边界 | BentoML |
 | 颜色匹配 | CIE Lab + CIEDE2000 |
 | 导出 | Canvas toBlob PNG |
 | 部署形态 | 静态站点 |
@@ -27,39 +29,53 @@
 ## 3. 工程结构
 
 ```text
-perler-studio/
-├── src/
-│   ├── components/
-│   │   ├── PerlerStudio.tsx
-│   │   └── HomePage.astro
-│   ├── i18n/
-│   │   └── ui.ts
-│   ├── lib/
-│   │   ├── color.ts
-│   │   ├── palette.ts
-│   │   ├── pattern.ts
-│   │   ├── render.ts
-│   │   └── utils.ts
-│   └── pages/
-│       ├── index.astro
-│       └── zh/index.astro
+perler-striner/
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── PerlerStudio.tsx
+│   │   │   └── HomePage.astro
+│   │   ├── i18n/
+│   │   │   └── ui.ts
+│   │   ├── lib/
+│   │   │   ├── color.ts
+│   │   │   ├── grid.ts
+│   │   │   ├── palette.ts
+│   │   │   ├── pattern.ts
+│   │   │   ├── processor-client.ts
+│   │   │   ├── render.ts
+│   │   │   └── utils.ts
+│   │   └── pages/
+│   │       ├── index.astro
+│   │       └── zh/index.astro
+│   ├── package.json
+│   └── astro.config.mjs
+├── backend/
+│   └── src/python_backend/
+│       ├── web/
+│       ├── schemas/
+│       ├── core/
+│       ├── services/
+│       ├── algorithms/
+│       └── serving/
 ├── docs/
 │   ├── PRD.md
 │   └── TECH_DESIGN.md
-├── package.json
-└── astro.config.mjs
+└── README.md
 ```
 
 核心文件说明：
 
 | 文件 | 职责 |
 | --- | --- |
-| `src/components/PerlerStudio.tsx` | 页面状态、图片上传、参数控制、生成触发、下载交互 |
-| `src/lib/pattern.ts` | 将 ImageData 转成拼豆图数据 |
-| `src/lib/color.ts` | RGB/Lab 转换、CIEDE2000、最近色匹配 |
-| `src/lib/palette.ts` | 拼豆品牌与色卡数据 |
-| `src/lib/render.ts` | 拼豆图渲染、网格线、拼板线、导出 PNG |
-| `src/i18n/ui.ts` | 中英文文案 |
+| `frontend/src/components/PerlerStudio.tsx` | 页面状态、图片上传、两阶段生成、下载交互 |
+| `frontend/src/lib/grid.ts` | 浏览器本地缩放与强制背景移除 |
+| `frontend/src/lib/processor-client.ts` | 后端请求、响应校验、超时取消与本地回退 |
+| `frontend/src/lib/pattern.ts` | 将 RGBA 格子图转换成拼豆图数据 |
+| `frontend/src/lib/color.ts` | RGB/Lab 转换、CIEDE2000、最近色匹配 |
+| `frontend/src/lib/palette.ts` | 拼豆品牌与色卡数据 |
+| `frontend/src/lib/render.ts` | 拼豆图渲染、网格线、拼板线、导出 PNG |
+| `frontend/src/i18n/ui.ts` | 中英文文案 |
 
 ## 4. 核心数据流
 
@@ -68,8 +84,8 @@ perler-studio/
 → createImageBitmap 解码图片
 → 保存 Source 到 React state
 → 根据宽度豆数计算目标网格尺寸
-→ Canvas 下采样为 ImageData
-→ generatePattern 生成拼豆图数据
+→ 后端生成 RGBA 格子图，失败则 Canvas 下采样并移除背景
+→ generatePattern 执行色板匹配、抖动和统计
 → renderPattern 渲染到预览 Canvas
 → renderExport 生成带图例的导出 Canvas
 → canvas.toBlob 下载 PNG
@@ -88,6 +104,7 @@ interface Source {
   height: number;
   name: string;
   thumb: string;
+  file: File | null;
 }
 ```
 
@@ -100,8 +117,25 @@ interface Source {
 | `height` | 原图高度 |
 | `name` | 图片名称，用于导出文件名 |
 | `thumb` | 缩略图 URL |
+| `file` | 用户上传的原始文件；内置示例为 `null`，不会请求后端 |
 
-### 5.2 Pattern
+### 5.2 RgbaGrid
+
+图片算法与拼豆业务之间的固定数据切面：
+
+```ts
+interface RgbaGrid {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+}
+```
+
+网格按行存储，每格 4 字节 RGBA；`data.length` 必须严格等于
+`width * height * 4`，背景格通过 alpha 标记为空。此结构不包含品牌、
+色板索引、颜色用量或拼豆总数。
+
+### 5.3 Pattern
 
 `Pattern` 是生成后的拼豆图数据。
 
@@ -127,7 +161,7 @@ interface Pattern {
 | `used` | 已使用颜色及数量，按数量倒序 |
 | `totalBeads` | 总豆数 |
 
-### 5.3 Palette / Brand
+### 5.4 Palette / Brand
 
 色卡结构由 `palette.ts` 管理。每个品牌包含颜色列表和豆子尺寸。
 
@@ -177,15 +211,24 @@ const h = Math.max(
 - 高度按原图比例自动计算。
 - 暂不支持手动固定宽高。
 
-### 6.3 下采样
+### 6.3 后端优先与本地回退
 
-`downsample` 使用 Canvas 将原图缩放为目标网格大小。
+用户上传的原始 `File`、目标宽高、算法标识、可选版本和 JSON 参数通过
+multipart 发送到 `/api/v1/process`。请求不包含 `remove_background`；所有
+后端算法必须输出已移除背景的格子图。
+
+前端仅接受 HTTP 成功、统一信封合法、算法身份和尺寸匹配、Base64 可解码且
+RGBA 长度正确的结果。未配置、网络错误、超时、非成功状态、空响应和非法
+响应都自动执行 `grid.ts` 中的本地处理。
+
+本地 `downsample` 使用 Canvas 将原图缩放为目标网格大小：
 
 处理策略：
 
 1. 对大图进行多次减半缩放。
 2. 最后绘制到目标宽高。
 3. 读取目标 Canvas 的 ImageData。
+4. 执行既有边缘连通背景移除，并以透明 alpha 标记空格。
 
 这样比一次性缩小更能保留细节，减少锯齿和混色异常。
 
@@ -305,7 +348,8 @@ renderExport(pattern).toBlob((blob) => {
 ### 10.1 当前能力
 
 - 图片上传。
-- 图片本地处理。
+- 后端优先、浏览器自动回退的格子图预处理。
+- 强制背景移除，无关闭参数或页面开关。
 - 多品牌色卡。
 - CIEDE2000 颜色匹配。
 - 抖动。
@@ -322,7 +366,8 @@ renderExport(pattern).toBlob((blob) => {
 - 没有 PDF 导出。
 - 没有手动编辑。
 - 没有颜色数量上限。
-- 没有背景去除。
+- 当前后端没有生产图片算法，默认处理请求返回 `501` 并触发前端回退。
+- 尚未在真实 GPU、真实模型和目标并发下进行性能验证。
 - 没有作品保存。
 
 ## 11. 后续扩展设计

@@ -1,10 +1,20 @@
 # build output
-dist/
+frontend/dist/
 # generated types
-.astro/
+frontend/.astro/
 
 # dependencies
-node_modules/
+frontend/node_modules/
+
+# Python
+backend/.venv/
+backend/.tools/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+__pycache__/
+*.py[cod]
 
 # logs
 npm-debug.log*
