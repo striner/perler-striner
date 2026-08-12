@@ -22,7 +22,7 @@ const t = ui[locale];
 	</head>
 	<body class="min-h-screen bg-neutral-50 text-foreground antialiased">
 		<header class="border-b bg-white">
-			<div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4">
+			<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-4">
 				<div class="flex flex-1 items-center gap-2">
 					<span
 						class="inline-flex size-8 items-center justify-center rounded-lg bg-neutral-950 text-sm font-bold tracking-tight text-white"
@@ -32,13 +32,21 @@ const t = ui[locale];
 					</span>
 					<h1 class="text-xl font-semibold tracking-tight">striner Perler</h1>
 				</div>
-				<a
-					href={t.switchHref}
-					hreflang={t.switchLang}
-					class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-				>
-					{t.switchLabel}
-				</a>
+				<nav class="flex items-center gap-2" aria-label="Page links">
+					<a
+						href={t.guideHref}
+						class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					>
+						{t.guideLabel}
+					</a>
+					<a
+						href={t.switchHref}
+						hreflang={t.switchLang}
+						class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					>
+						{t.switchLabel}
+					</a>
+				</nav>
 			</div>
 		</header>
 		<main class="mx-auto max-w-6xl px-4 py-6">
@@ -49,5 +57,14 @@ const t = ui[locale];
 		>
 			{t.footer}
 		</footer>
+		<a
+			href={t.feedbackHref}
+			target="_blank"
+			rel="noreferrer"
+			aria-label={t.feedbackAriaLabel}
+			class="fixed bottom-5 right-5 z-50 rounded-full bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-colors hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+		>
+			{t.feedbackLabel}
+		</a>
 	</body>
 </html>

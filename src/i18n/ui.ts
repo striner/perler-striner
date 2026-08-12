@@ -9,6 +9,11 @@ const en = {
   subtitle: "Turn any image into a fuse-bead pattern",
   footer:
     "Everything runs in your browser — images never leave your device. 7 complete color systems: Perler (103), MARD 221 & 291, COCO 291, Hama, Artkal S and Artkal Mini — 1,392 colors in total. Standard pegboards are 29×29 pegs; midi beads are 5 mm, mini beads 2.6 mm.",
+  guideLabel: "Guide",
+  guideHref: "/perler-striner/pages/guide/en/",
+  feedbackLabel: "Feedback",
+  feedbackHref: "https://v.wjx.cn/vm/wFChGhh.aspx",
+  feedbackAriaLabel: "Open feedback questionnaire",
   switchLabel: "中文",
   switchHref: "/perler-striner/zh/",
   switchLang: "zh",
@@ -56,6 +61,11 @@ const zh: Dict = {
   subtitle: "把任意图片变成拼豆图纸",
   footer:
     "所有处理都在你的浏览器中完成——图片不会上传。支持 7 套完整色卡：Perler（103 色）、MARD 221 与 291、COCO 291、Hama、Artkal 中豆与 Artkal Mini，共 1,392 色。标准拼板为 29×29 孔；中豆直径 5 毫米，小豆 2.6 毫米。",
+  guideLabel: "说明文档",
+  guideHref: "/perler-striner/pages/guide/zh/",
+  feedbackLabel: "反馈",
+  feedbackHref: "https://v.wjx.cn/vm/wFChGhh.aspx",
+  feedbackAriaLabel: "打开反馈问卷",
   switchLabel: "English",
   switchHref: "/perler-striner/",
   switchLang: "en",

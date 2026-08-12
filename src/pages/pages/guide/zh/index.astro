@@ -1,0 +1,253 @@
+---
+import "../../../../styles/global.css";
+
+const homeHref = "/perler-striner/zh/";
+const englishHref = "/perler-striner/pages/guide/en/";
+const feedbackHref = "https://v.wjx.cn/vm/wFChGhh.aspx";
+const contactEmail = "striner@foxmail.com";
+---
+
+<html lang="zh-CN">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width" />
+		<meta
+			name="description"
+			content="striner Perler 拼豆图纸生成器说明文档：从上传图片到下载图纸的完整使用指南。"
+		/>
+		<title>说明文档 — striner Perler</title>
+	</head>
+	<body class="min-h-screen bg-neutral-50 text-foreground antialiased">
+		<header class="border-b bg-white">
+			<div class="mx-auto flex max-w-4xl flex-wrap items-center gap-3 px-4 py-4">
+				<div class="flex flex-1 items-center gap-2">
+					<span
+						class="inline-flex size-8 items-center justify-center rounded-lg bg-neutral-950 text-sm font-bold tracking-tight text-white"
+						aria-hidden="true"
+					>
+						S
+					</span>
+					<div>
+						<p class="text-sm text-muted-foreground">striner Perler</p>
+						<h1 class="text-xl font-semibold tracking-tight">说明文档</h1>
+					</div>
+				</div>
+				<nav class="flex items-center gap-2" aria-label="说明文档导航">
+					<a
+						href={homeHref}
+						class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					>
+						返回系统
+					</a>
+					<a
+						href={englishHref}
+						hreflang="en"
+						class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					>
+						English
+					</a>
+				</nav>
+			</div>
+		</header>
+
+		<main class="mx-auto max-w-4xl px-4 py-8">
+			<section class="rounded-2xl border bg-white p-6 shadow-sm">
+				<p class="text-sm font-medium text-muted-foreground">用户指南</p>
+				<h2 class="mt-2 text-3xl font-semibold tracking-tight">
+					把图片转换成可制作的拼豆图纸
+				</h2>
+				<p class="mt-4 leading-7 text-muted-foreground">
+					striner Perler 是一个在浏览器中运行的拼豆图纸生成工具。你可以上传图片，
+					选择拼豆品牌和图纸尺寸，预览生成结果，查看配豆清单，并下载用于打印或参考的 PNG 图纸。
+				</p>
+			</section>
+
+			<div class="mt-8 space-y-8">
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">1. 这个系统适合做什么</h2>
+					<ul class="mt-4 list-disc space-y-2 pl-6 leading-7 text-muted-foreground">
+						<li>把头像、宠物、Logo、动漫图等图片转换成拼豆图纸。</li>
+						<li>按真实拼豆品牌色卡匹配颜色，方便采购和制作。</li>
+						<li>查看每种颜色需要多少颗豆，减少手工统计成本。</li>
+						<li>下载带网格、坐标和配豆清单的 PNG 图纸。</li>
+					</ul>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">2. 使用前你需要知道</h2>
+					<ul class="mt-4 list-disc space-y-2 pl-6 leading-7 text-muted-foreground">
+						<li>图片处理在你的浏览器本地完成，图片不会上传到服务器。</li>
+						<li>生成结果会受到原图清晰度、背景复杂度、拼豆品牌色卡和图纸尺寸影响。</li>
+						<li>拼豆颜色是按色卡近似匹配，实物颜色、屏幕显示和图片颜色可能存在差异。</li>
+						<li>如果原图背景复杂，建议先手动处理图片，或关闭“去掉背景”后对比效果。</li>
+					</ul>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">3. 从零开始使用</h2>
+					<ol class="mt-4 list-decimal space-y-3 pl-6 leading-7 text-muted-foreground">
+						<li>
+							<strong class="text-foreground">打开系统：</strong>
+							进入中文页面后，你会看到左侧设置区和右侧图纸预览区。
+						</li>
+						<li>
+							<strong class="text-foreground">上传图片：</strong>
+							点击“选择图片”，或把图片拖到上传区域。也可以点击“试试示例”先体验流程。
+						</li>
+						<li>
+							<strong class="text-foreground">选择拼豆品牌：</strong>
+							在“拼豆品牌”中选择你准备使用的色卡。不同品牌的颜色数量不同，生成效果也会不同。
+						</li>
+						<li>
+							<strong class="text-foreground">调整宽度：</strong>
+							使用“宽度（豆数）”控制图纸横向豆数。宽度越大，细节越多，制作成本也越高。
+						</li>
+						<li>
+							<strong class="text-foreground">调整效果开关：</strong>
+							“去掉背景”适合主体清晰、背景较简单的图片；“仿色（抖动）”适合照片和渐变；“网格与拼板参考线”便于制作时定位。
+						</li>
+						<li>
+							<strong class="text-foreground">查看预览：</strong>
+							右侧会显示拼豆图纸、尺寸、总豆数、颜色数量和拼板数量。
+						</li>
+						<li>
+							<strong class="text-foreground">查看配豆清单：</strong>
+							在图纸下方查看每种颜色需要的数量。点击某个颜色，可以高亮它在图纸中的位置。
+						</li>
+						<li>
+							<strong class="text-foreground">下载图纸：</strong>
+							确认效果后点击“下载图纸 PNG”，保存可打印或分享的图纸文件。
+						</li>
+					</ol>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">4. 设置项说明</h2>
+					<div class="mt-4 overflow-x-auto">
+						<table class="w-full min-w-[640px] border-collapse text-left text-sm">
+							<thead>
+								<tr class="border-b">
+									<th class="py-3 pr-4 font-medium">设置项</th>
+									<th class="py-3 pr-4 font-medium">说明</th>
+									<th class="py-3 font-medium">建议</th>
+								</tr>
+							</thead>
+							<tbody class="text-muted-foreground">
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">拼豆品牌</td>
+									<td class="py-3 pr-4">决定使用哪套真实拼豆色卡匹配颜色。</td>
+									<td class="py-3">优先选择你实际购买或已有的品牌。</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">宽度（豆数）</td>
+									<td class="py-3 pr-4">控制图纸横向有多少颗豆，高度会按原图比例自动计算。</td>
+									<td class="py-3">初次尝试可从 58 或 87 左右开始。</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">缩放</td>
+									<td class="py-3 pr-4">只影响页面预览大小，不改变最终图纸数据。</td>
+									<td class="py-3">看不清时调大，想看整体时调小。</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">仿色（抖动）</td>
+									<td class="py-3 pr-4">通过颜色误差扩散让照片或渐变更自然。</td>
+									<td class="py-3">照片类图片可开启，图标类图片可关闭。</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">去掉背景</td>
+									<td class="py-3 pr-4">尝试清除与图片边缘连通的背景区域。</td>
+									<td class="py-3">白底、浅色背景或主体清晰时开启。</td>
+								</tr>
+								<tr>
+									<td class="py-3 pr-4 text-foreground">网格与拼板参考线</td>
+									<td class="py-3 pr-4">显示制作定位用的网格和 29×29 拼板参考线。</td>
+									<td class="py-3">制作前建议开启。</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">5. 如何判断结果是否合适</h2>
+					<ul class="mt-4 list-disc space-y-2 pl-6 leading-7 text-muted-foreground">
+						<li>主体轮廓是否清楚，重要细节是否还能看出来。</li>
+						<li>颜色数量是否在可接受范围内，过多颜色会增加备料和制作难度。</li>
+						<li>图纸尺寸是否适合你的拼板数量和展示场景。</li>
+						<li>背景是否符合预期；如果背景被误删或没有删干净，可以切换“去掉背景”再比较。</li>
+					</ul>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">6. 常见问题</h2>
+					<div class="mt-4 space-y-5">
+						<div>
+							<h3 class="font-medium">为什么颜色和原图不完全一样？</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								系统会把图片颜色匹配到真实拼豆色卡中最接近的颜色。由于拼豆色卡有限，结果会是近似效果。
+							</p>
+						</div>
+						<div>
+							<h3 class="font-medium">为什么去背景效果不稳定？</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								当前去背景适合边缘背景比较单一的图片。如果背景复杂、主体贴边或主体颜色接近背景，建议先手动处理原图。
+							</p>
+						</div>
+						<div>
+							<h3 class="font-medium">图纸太大怎么办？</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								降低“宽度（豆数）”可以减少总豆数和拼板数量，但细节也会减少。
+							</p>
+						</div>
+						<div>
+							<h3 class="font-medium">如何反馈问题或建议？</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								可以点击页面右下角“反馈”填写问卷，也可以发送邮件到
+								<a class="underline" href={`mailto:${contactEmail}`}>{contactEmail}</a>。
+							</p>
+						</div>
+					</div>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">7. 版本更新记录</h2>
+					<p class="mt-3 leading-7 text-muted-foreground">
+						每次版本更新或分支合并到 master 前，都需要同步维护本区域。记录可以人工编写，也可以由 AI 根据变更内容总结。
+					</p>
+					<div class="mt-4 overflow-x-auto">
+						<table class="w-full min-w-[720px] border-collapse text-left text-sm">
+							<thead>
+								<tr class="border-b">
+									<th class="py-3 pr-4 font-medium">时间</th>
+									<th class="py-3 pr-4 font-medium">操作人</th>
+									<th class="py-3 pr-4 font-medium">版本</th>
+									<th class="py-3 pr-4 font-medium">更新内容</th>
+									<th class="py-3 font-medium">用户可感知变化</th>
+								</tr>
+							</thead>
+							<tbody class="text-muted-foreground">
+								<tr>
+									<td class="py-3 pr-4">2026-08-12</td>
+									<td class="py-3 pr-4">zjw271208550 / AI 协作</td>
+									<td class="py-3 pr-4">user_docs_and_feedback</td>
+									<td class="py-3 pr-4">新增说明文档入口、中文说明文档、英文说明文档和问卷反馈入口。</td>
+									<td class="py-3">用户可以查看使用说明，并通过右下角入口提交反馈。</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</section>
+			</div>
+		</main>
+
+		<a
+			href={feedbackHref}
+			target="_blank"
+			rel="noreferrer"
+			class="fixed bottom-5 right-5 z-50 rounded-full bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-colors hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+		>
+			反馈
+		</a>
+	</body>
+</html>

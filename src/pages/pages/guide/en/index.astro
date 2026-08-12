@@ -1,0 +1,258 @@
+---
+import "../../../../styles/global.css";
+
+const homeHref = "/perler-striner/";
+const chineseHref = "/perler-striner/pages/guide/zh/";
+const feedbackHref = "https://v.wjx.cn/vm/wFChGhh.aspx";
+const contactEmail = "striner@foxmail.com";
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width" />
+		<meta
+			name="description"
+			content="striner Perler user guide: learn how to upload an image, tune settings, preview a bead pattern, and download a PNG chart."
+		/>
+		<title>Guide — striner Perler</title>
+	</head>
+	<body class="min-h-screen bg-neutral-50 text-foreground antialiased">
+		<header class="border-b bg-white">
+			<div class="mx-auto flex max-w-4xl flex-wrap items-center gap-3 px-4 py-4">
+				<div class="flex flex-1 items-center gap-2">
+					<span
+						class="inline-flex size-8 items-center justify-center rounded-lg bg-neutral-950 text-sm font-bold tracking-tight text-white"
+						aria-hidden="true"
+					>
+						S
+					</span>
+					<div>
+						<p class="text-sm text-muted-foreground">striner Perler</p>
+						<h1 class="text-xl font-semibold tracking-tight">Guide</h1>
+					</div>
+				</div>
+				<nav class="flex items-center gap-2" aria-label="Guide navigation">
+					<a
+						href={homeHref}
+						class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					>
+						Back to app
+					</a>
+					<a
+						href={chineseHref}
+						hreflang="zh"
+						class="rounded-md border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					>
+						中文
+					</a>
+				</nav>
+			</div>
+		</header>
+
+		<main class="mx-auto max-w-4xl px-4 py-8">
+			<section class="rounded-2xl border bg-white p-6 shadow-sm">
+				<p class="text-sm font-medium text-muted-foreground">User guide</p>
+				<h2 class="mt-2 text-3xl font-semibold tracking-tight">
+					Turn an image into a makeable fuse-bead pattern
+				</h2>
+				<p class="mt-4 leading-7 text-muted-foreground">
+					striner Perler is a browser-based bead pattern maker. Upload an image,
+					choose a bead palette and pattern size, preview the result, inspect the
+					shopping list, and download a PNG chart for printing or reference.
+				</p>
+			</section>
+
+			<div class="mt-8 space-y-8">
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">1. What this app is for</h2>
+					<ul class="mt-4 list-disc space-y-2 pl-6 leading-7 text-muted-foreground">
+						<li>Convert portraits, pets, logos, character art, and other images into bead charts.</li>
+						<li>Match colors against real bead palette systems.</li>
+						<li>Estimate how many beads of each color you need.</li>
+						<li>Download a PNG chart with grid lines, coordinates, and a color legend.</li>
+					</ul>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">2. Before you start</h2>
+					<ul class="mt-4 list-disc space-y-2 pl-6 leading-7 text-muted-foreground">
+						<li>All image processing runs locally in your browser. Your image is not uploaded to a server.</li>
+						<li>The result depends on image clarity, background complexity, palette choice, and pattern size.</li>
+						<li>Bead colors are approximations from real palettes, so screen colors and physical beads may differ.</li>
+						<li>For complex backgrounds, consider editing the source image first or comparing results with background removal off.</li>
+					</ul>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">3. Step-by-step usage</h2>
+					<ol class="mt-4 list-decimal space-y-3 pl-6 leading-7 text-muted-foreground">
+						<li>
+							<strong class="text-foreground">Open the app:</strong>
+							The settings panel is on the left, and the pattern preview appears on the right.
+						</li>
+						<li>
+							<strong class="text-foreground">Upload an image:</strong>
+							Click “Choose image”, drag an image into the upload area, or use “Try sample” to test the workflow.
+						</li>
+						<li>
+							<strong class="text-foreground">Choose a bead brand:</strong>
+							Select the palette you plan to use. Different brands have different color ranges and can produce different results.
+						</li>
+						<li>
+							<strong class="text-foreground">Set the width:</strong>
+							“Width in beads” controls the horizontal bead count. Larger patterns keep more detail but require more beads.
+						</li>
+						<li>
+							<strong class="text-foreground">Tune effect switches:</strong>
+							“Remove background” works best for clear subjects on simple backgrounds. “Dithering” can help photos and gradients.
+							“Grid & pegboard lines” helps with placement while making the design.
+						</li>
+						<li>
+							<strong class="text-foreground">Review the preview:</strong>
+							Check the pattern size, bead count, color count, and pegboard estimate.
+						</li>
+						<li>
+							<strong class="text-foreground">Use the shopping list:</strong>
+							Review how many beads each color needs. Click a color to highlight its positions in the pattern.
+						</li>
+						<li>
+							<strong class="text-foreground">Download the chart:</strong>
+							Click “Download pattern PNG” when the result looks right.
+						</li>
+					</ol>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">4. Settings explained</h2>
+					<div class="mt-4 overflow-x-auto">
+						<table class="w-full min-w-[640px] border-collapse text-left text-sm">
+							<thead>
+								<tr class="border-b">
+									<th class="py-3 pr-4 font-medium">Setting</th>
+									<th class="py-3 pr-4 font-medium">What it does</th>
+									<th class="py-3 font-medium">Suggestion</th>
+								</tr>
+							</thead>
+							<tbody class="text-muted-foreground">
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">Bead brand</td>
+									<td class="py-3 pr-4">Chooses the real color palette used for matching.</td>
+									<td class="py-3">Use the brand you already own or plan to buy.</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">Width in beads</td>
+									<td class="py-3 pr-4">Controls the horizontal bead count. Height is calculated from the image ratio.</td>
+									<td class="py-3">Try around 58 or 87 for an initial test.</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">Zoom</td>
+									<td class="py-3 pr-4">Changes preview size only. It does not change the pattern data.</td>
+									<td class="py-3">Increase it for detail, decrease it to see the whole chart.</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">Dithering</td>
+									<td class="py-3 pr-4">Diffuses color error to make photos and gradients look smoother.</td>
+									<td class="py-3">Useful for photos; often unnecessary for icons or logos.</td>
+								</tr>
+								<tr class="border-b">
+									<td class="py-3 pr-4 text-foreground">Remove background</td>
+									<td class="py-3 pr-4">Attempts to remove background regions connected to the image border.</td>
+									<td class="py-3">Best for clear subjects on simple, light, or solid backgrounds.</td>
+								</tr>
+								<tr>
+									<td class="py-3 pr-4 text-foreground">Grid & pegboard lines</td>
+									<td class="py-3 pr-4">Shows construction guides and 29×29 pegboard references.</td>
+									<td class="py-3">Keep it on when preparing to build the design.</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">5. How to judge the result</h2>
+					<ul class="mt-4 list-disc space-y-2 pl-6 leading-7 text-muted-foreground">
+						<li>Check whether the main silhouette and important details are still recognizable.</li>
+						<li>Review whether the color count is practical for your materials and build time.</li>
+						<li>Confirm the physical size and pegboard count fit your plan.</li>
+						<li>If the background looks wrong, compare results with “Remove background” on and off.</li>
+					</ul>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">6. FAQ</h2>
+					<div class="mt-4 space-y-5">
+						<div>
+							<h3 class="font-medium">Why does the result not match the original colors exactly?</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								The app maps image colors to the closest available colors in a real bead palette. Since palettes are limited,
+								the result is an approximation.
+							</p>
+						</div>
+						<div>
+							<h3 class="font-medium">Why is background removal not always perfect?</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								The current cleanup works best for simple border-connected backgrounds. Complex scenes, edge-touching subjects,
+								or subject colors close to the background may need manual image editing first.
+							</p>
+						</div>
+						<div>
+							<h3 class="font-medium">What if the pattern is too large?</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								Lower the “Width in beads” value. This reduces bead count and pegboard count, but also removes detail.
+							</p>
+						</div>
+						<div>
+							<h3 class="font-medium">How can I send feedback?</h3>
+							<p class="mt-1 leading-7 text-muted-foreground">
+								Use the “Feedback” button in the bottom-right corner, or email
+								<a class="underline" href={`mailto:${contactEmail}`}>{contactEmail}</a>.
+							</p>
+						</div>
+					</div>
+				</section>
+
+				<section class="rounded-2xl border bg-white p-6 shadow-sm">
+					<h2 class="text-2xl font-semibold tracking-tight">7. Version updates</h2>
+					<p class="mt-3 leading-7 text-muted-foreground">
+						Update this section before each version update or before merging a version branch into master.
+						Entries can be written manually or summarized with AI assistance.
+					</p>
+					<div class="mt-4 overflow-x-auto">
+						<table class="w-full min-w-[720px] border-collapse text-left text-sm">
+							<thead>
+								<tr class="border-b">
+									<th class="py-3 pr-4 font-medium">Date</th>
+									<th class="py-3 pr-4 font-medium">Operator</th>
+									<th class="py-3 pr-4 font-medium">Version</th>
+									<th class="py-3 pr-4 font-medium">Changes</th>
+									<th class="py-3 font-medium">User-visible impact</th>
+								</tr>
+							</thead>
+							<tbody class="text-muted-foreground">
+								<tr>
+									<td class="py-3 pr-4">2026-08-12</td>
+									<td class="py-3 pr-4">zjw271208550 / AI collaboration</td>
+									<td class="py-3 pr-4">user_docs_and_feedback</td>
+									<td class="py-3 pr-4">Added guide links, Chinese and English guide pages, and a questionnaire feedback entry.</td>
+									<td class="py-3">Users can read the guide and submit feedback from the floating button.</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</section>
+			</div>
+		</main>
+
+		<a
+			href={feedbackHref}
+			target="_blank"
+			rel="noreferrer"
+			class="fixed bottom-5 right-5 z-50 rounded-full bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-colors hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+		>
+			Feedback
+		</a>
+	</body>
+</html>
