@@ -10,13 +10,19 @@ backend/   FastAPI + BentoML processing-service framework
 
 The frontend first calls a configured Python processor. A valid backend result
 is converted to a bead palette, counted, rendered, and exported in the browser.
-If the backend is unavailable, has no registered algorithm, times out, or
-returns invalid data, the existing browser processor runs automatically.
+If the backend is unavailable, times out, or returns invalid data, the existing
+browser processor runs automatically and the page shows a dismissible five-second
+fallback notice.
 
-The current backend intentionally contains no production image algorithm. Its
-algorithm registry is empty, so processing requests return `501` and exercise
-the frontend fallback. Future algorithms must return a background-removed RGBA
-grid through the shared algorithm contract.
+Image upload and processing-parameter changes mark the current result as stale.
+Processing starts only when the user selects **Generate**; while it runs, related
+controls are locked. Once the pattern is ready, the same action becomes **Download**.
+CV Native exposes its supported controls in a separate **Hyperparameters** panel.
+
+The backend registers `cv_native@1.0.0`, a CPU-only OpenCV pipeline. It removes
+backgrounds with a conservative GrabCut mask, visually sharpens foreground edges,
+and returns an exact-size RGBA grid. Bead-palette quantization remains entirely in
+the frontend.
 
 ## Quick Start
 
@@ -42,8 +48,8 @@ See [frontend/README.md](frontend/README.md) and
 
 ## Privacy
 
-When both a processor URL and algorithm identifier are configured, an uploaded
-image is sent to that backend before local processing. The backend framework
+When a processor URL is configured and CV Native is selected, an uploaded image
+is sent to that backend before local processing. The backend framework
 does not persist uploads. Deployments must use HTTPS and configure explicit
 CORS origins. Without backend configuration, or whenever the request fails,
 the image is processed locally in the browser.

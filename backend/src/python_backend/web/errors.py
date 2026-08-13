@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 def install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(BackendError)
     async def backend_error_handler(request: Request, error: BackendError):
+        logger.warning(
+            "Backend request failed accept_id=%s type=%s message=%s",
+            getattr(request.state, "accept_id", "unknown"),
+            error.__class__.__name__,
+            error.public_message,
+        )
         return envelope_response(
             request,
             status_code=error.status_code,

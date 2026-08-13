@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from python_backend.algorithms.production import build_production_registry
 from python_backend.algorithms.registry import AlgorithmRegistry
 from python_backend.core.config import Settings, get_settings
 from python_backend.services.processing import ProcessingService
@@ -18,7 +19,9 @@ def create_app(
     registry: AlgorithmRegistry | None = None,
 ) -> FastAPI:
     active_settings = settings or get_settings()
-    active_registry = registry or AlgorithmRegistry()
+    active_registry = (
+        registry if registry is not None else build_production_registry(active_settings)
+    )
     application = FastAPI(
         title="Python Backend",
         version="0.1.0",

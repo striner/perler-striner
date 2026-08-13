@@ -24,7 +24,8 @@ def make_settings(**overrides) -> Settings:
 
 
 def client_for(registry: AlgorithmRegistry | None = None, **settings) -> TestClient:
-    app = create_app(settings=make_settings(**settings), registry=registry)
+    active_registry = registry if registry is not None else AlgorithmRegistry()
+    app = create_app(settings=make_settings(**settings), registry=active_registry)
     return TestClient(app, raise_server_exceptions=False)
 
 

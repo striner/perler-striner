@@ -6,8 +6,8 @@
 
 当前工程包含静态前端和独立 Python 后端两个子项目：
 
-- 前端优先请求后端生成目标尺寸、已移除背景的 RGBA 格子图，失败时自动使用 Canvas 本地回退。
-- 后端采用 FastAPI + BentoML，本次只提供多算法、并发和 GPU 服务接入框架，不包含生产图片算法。
+- 前端在用户点击 Generate 后请求后端生成目标尺寸、已移除背景的 RGBA 格子图，失败时自动使用 Canvas 本地回退。
+- 后端采用 FastAPI + BentoML，并注册 CPU-only `cv_native@1.0.0`；框架继续为后续多算法、高并发和 GPU 服务预留边界。
 - 色板匹配、抖动、统计、渲染和导出仍由前端完成。
 - 后端未配置或不可用时，静态前端仍可独立使用。
 
@@ -83,6 +83,8 @@ perler-striner/
 用户上传图片
 → createImageBitmap 解码图片
 → 保存 Source 到 React state
+→ 上传、模式、宽度或 CV 超参数变化后标记为待生成
+→ 用户点击 Generate
 → 根据宽度豆数计算目标网格尺寸
 → 后端生成 RGBA 格子图，失败则 Canvas 下采样并移除背景
 → generatePattern 执行色板匹配、抖动和统计
@@ -216,6 +218,11 @@ const h = Math.max(
 用户上传的原始 `File`、目标宽高、算法标识、可选版本和 JSON 参数通过
 multipart 发送到 `/api/v1/process`。请求不包含 `remove_background`；所有
 后端算法必须输出已移除背景的格子图。
+
+选择 `cv_native` 时，Hyperparameters 面板把支持的参数统一映射为 snake_case
+`algorithm_params`。上传、模式、宽度或这些超参数变化只让结果失效，不立即发请求；
+Generate 捕获当前输入快照后提交一次请求。处理期间相关控件锁定，完成色板匹配后主按钮
+才从 Generating 变为 Download。品牌、抖动、网格和缩放只作用于当前结果，不重新上传原图。
 
 前端仅接受 HTTP 成功、统一信封合法、算法身份和尺寸匹配、Base64 可解码且
 RGBA 长度正确的结果。未配置、网络错误、超时、非成功状态、空响应和非法
@@ -366,7 +373,8 @@ renderExport(pattern).toBlob((blob) => {
 - 没有 PDF 导出。
 - 没有手动编辑。
 - 没有颜色数量上限。
-- 当前后端没有生产图片算法，默认处理请求返回 `501` 并触发前端回退。
+- 当前生产后端注册 CPU-only `cv_native@1.0.0`，使用 GrabCut、Mask 修复、前景边缘
+  视觉锐化和 Mask 感知采样生成 RGBA 格子；复杂场景仍可能失败并触发浏览器回退。
 - 尚未在真实 GPU、真实模型和目标并发下进行性能验证。
 - 没有作品保存。
 

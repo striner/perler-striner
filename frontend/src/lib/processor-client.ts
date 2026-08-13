@@ -9,10 +9,60 @@ export interface ProcessorConfig {
   timeoutMs: number;
 }
 
+export type ProcessingMode = "cv_native" | "browser_native";
+
+export interface CvNativeHyperparameters {
+  edgeStrength: number;
+  outlineStrength: number;
+  backgroundRecoveryDistance: number;
+  coarseSubjectCount: number;
+  protectionScale: number;
+  foregroundSeedDistance: number;
+  edgeSeedThreshold: number;
+  saturationSeedThreshold: number;
+  protectionDilationRadius: number;
+  recoveryNeighborhoodRatio: number;
+  foregroundCoverageThreshold: number;
+}
+
+export const DEFAULT_CV_NATIVE_HYPERPARAMETERS: CvNativeHyperparameters = {
+  edgeStrength: 0.65,
+  outlineStrength: 0.1,
+  backgroundRecoveryDistance: 6,
+  coarseSubjectCount: 1,
+  protectionScale: 2,
+  foregroundSeedDistance: 28,
+  edgeSeedThreshold: 56,
+  saturationSeedThreshold: 18,
+  protectionDilationRadius: 2,
+  recoveryNeighborhoodRatio: 0.014,
+  foregroundCoverageThreshold: 0.2,
+};
+
+export function cvNativeAlgorithmParams(
+  values: CvNativeHyperparameters
+): Record<string, number> {
+  return {
+    edge_strength: values.edgeStrength,
+    outline_strength: values.outlineStrength,
+    background_recovery_distance: values.backgroundRecoveryDistance,
+    coarse_subject_count: values.coarseSubjectCount,
+    protection_scale: values.protectionScale,
+    foreground_seed_distance: values.foregroundSeedDistance,
+    edge_seed_threshold: values.edgeSeedThreshold,
+    saturation_seed_threshold: values.saturationSeedThreshold,
+    protection_dilation_radius: values.protectionDilationRadius,
+    recovery_neighborhood_ratio: values.recoveryNeighborhoodRatio,
+    foreground_coverage_threshold: values.foregroundCoverageThreshold,
+  };
+}
+
+export type AcquireGridResult =
+  | { grid: RgbaGrid; source: "backend"; fellBack: false }
+  | { grid: RgbaGrid; source: "browser"; fellBack: boolean };
+
 interface ProcessorEnvironment {
   PUBLIC_PROCESSOR_API_URL?: string;
-  PUBLIC_PROCESSOR_ALGORITHM?: string;
-  PUBLIC_PROCESSOR_ALGORITHM_VERSION?: string;
   PUBLIC_PROCESSOR_ALGORITHM_PARAMS?: string;
   PUBLIC_PROCESSOR_TIMEOUT_MS?: string;
 }
@@ -28,17 +78,12 @@ interface AcquireGridOptions {
   localProcessor?: typeof prepareLocalGrid;
 }
 
-const IDENTIFIER_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
-const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const DEFAULT_PROCESSOR_TIMEOUT_MS = 35_000;
 
 export function readProcessorConfig(env: ProcessorEnvironment): ProcessorConfig | null {
   const baseUrl = env.PUBLIC_PROCESSOR_API_URL?.trim();
-  const algorithm = env.PUBLIC_PROCESSOR_ALGORITHM?.trim();
-  if (!baseUrl || !algorithm || !IDENTIFIER_PATTERN.test(algorithm)) return null;
-
-  const algorithmVersion = env.PUBLIC_PROCESSOR_ALGORITHM_VERSION?.trim() || undefined;
-  if (algorithmVersion && !VERSION_PATTERN.test(algorithmVersion)) return null;
+  if (!baseUrl) return null;
 
   let algorithmParams: Record<string, unknown> = {};
   try {
@@ -49,20 +94,22 @@ export function readProcessorConfig(env: ProcessorEnvironment): ProcessorConfig 
     return null;
   }
 
-  const requestedTimeout = Number(env.PUBLIC_PROCESSOR_TIMEOUT_MS || "8000");
+  const requestedTimeout = Number(
+    env.PUBLIC_PROCESSOR_TIMEOUT_MS || String(DEFAULT_PROCESSOR_TIMEOUT_MS)
+  );
   const timeoutMs = Number.isFinite(requestedTimeout)
     ? Math.min(60_000, Math.max(250, Math.round(requestedTimeout)))
-    : 8_000;
+    : DEFAULT_PROCESSOR_TIMEOUT_MS;
   return {
     baseUrl: baseUrl.replace(/\/+$/, ""),
-    algorithm,
-    algorithmVersion,
+    algorithm: "cv_native",
+    algorithmVersion: "1.0.0",
     algorithmParams,
     timeoutMs,
   };
 }
 
-export async function acquireGrid(options: AcquireGridOptions): Promise<RgbaGrid> {
+export async function acquireGrid(options: AcquireGridOptions): Promise<AcquireGridResult> {
   const localProcessor = options.localProcessor ?? prepareLocalGrid;
   if (options.file && options.config && !options.signal.aborted) {
     const remote = await requestBackendGrid(
@@ -73,11 +120,15 @@ export async function acquireGrid(options: AcquireGridOptions): Promise<RgbaGrid
       options.signal,
       options.fetchImpl
     );
-    if (remote) return remote;
+    if (remote) return { grid: remote, source: "backend", fellBack: false };
     if (options.signal.aborted) throw new DOMException("Request aborted", "AbortError");
   }
   if (options.signal.aborted) throw new DOMException("Request aborted", "AbortError");
-  return localProcessor(options.source, options.width, options.height);
+  return {
+    grid: localProcessor(options.source, options.width, options.height),
+    source: "browser",
+    fellBack: Boolean(options.file && options.config),
+  };
 }
 
 export async function requestBackendGrid(

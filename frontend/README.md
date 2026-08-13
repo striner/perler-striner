@@ -19,6 +19,9 @@ and export always remain in the browser.
 ## Features
 
 - Upload or drag-and-drop local images.
+- Select CV Native backend processing or Browser Native local processing.
+- Tune CV Native foreground recovery, protection, seed, and edge-enhancement parameters.
+- Explicitly generate after input changes; generation locks controls and then enables download.
 - Generate bead patterns by width in beads while preserving the source aspect ratio.
 - Choose from 7 bead color systems with 1,392 colors in total.
 - Match image colors to real bead colors using CIE Lab + CIEDE2000 perceptual distance.
@@ -37,15 +40,27 @@ The main panel exposes the most important generation controls:
 
 | Setting | Description |
 | :-- | :-- |
+| Processing mode | CV Native uses the configured backend and falls back with a five-second notice; Browser Native stays local. |
 | Bead brand | Choose the target bead palette. The same image can produce different results with different real-world color systems. |
 | Width in beads | Controls the horizontal bead count. The height is calculated from the original image aspect ratio. |
 | Zoom | Changes the preview cell size only. It does not change the generated pattern data. |
 | Dithering | Enables Floyd–Steinberg error diffusion for smoother gradients and photo-like results. |
 | Grid & pegboard lines | Shows or hides construction guides in the preview. Exported PNGs always keep printable guide information. |
 
+CV Native adds a separate **Hyperparameters** panel below Pattern settings. It
+contains the backend-supported foreground recovery, coarse-subject protection,
+foreground seed, edge seed, mask dilation, grid coverage, sharpening, and outline
+controls. The panel is collapsed by default. **Restore defaults** resets all CV
+controls without starting a request.
+Uploading a new image or changing the processing mode, target width, or
+a CV hyperparameter does not immediately process the image. The main action changes
+to **Generate**; during processing it displays **Generating** and locks the controls,
+then becomes **Download** after palette matching completes. Brand, dithering, grid,
+and zoom changes continue to apply to the current result without another backend call.
+
 ### Grid preparation and background removal
 
-For uploaded files, the frontend first asks the configured processor to resize
+For uploaded files, selecting **Generate** asks the configured processor to resize
 the source to the target grid and remove its background. A valid response is a
 row-major RGBA grid with one pixel per bead. Network errors, timeouts, non-2xx
 responses, empty responses, and contract violations automatically select the
@@ -142,9 +157,10 @@ targetHeight = round(targetWidth * sourceHeight / sourceWidth)
 ```
 
 The original `File`, decoded image, and target dimensions are retained. When
-`PUBLIC_PROCESSOR_API_URL` and `PUBLIC_PROCESSOR_ALGORITHM` are valid, the file
-is posted to `/api/v1/process`. Otherwise the image is drawn to an offscreen
+`PUBLIC_PROCESSOR_API_URL` is configured and CV Native is selected, the file is
+posted to `/api/v1/process` as `cv_native@1.0.0`. Otherwise it is drawn to an offscreen
 Canvas at the target size. At the resulting grid, **one pixel equals one bead**.
+The request is sent only after the user selects **Generate**.
 
 ### 2. Transparent pixels and background cleanup
 
@@ -260,8 +276,10 @@ Commands:
 | `npm run preview` | Preview the production build locally |
 
 Processor configuration is read at build time. See `.env.example` for
-`PUBLIC_PROCESSOR_API_URL`, algorithm identity, optional JSON parameters, and
-timeout. If the URL or algorithm is absent or invalid, no HTTP request is made.
+`PUBLIC_PROCESSOR_API_URL`, optional CV parameters, and timeout. If the URL is
+absent, Browser Native is selected and no HTTP request is made.
+The default processor timeout is 35 seconds, leaving response overhead above the
+backend's 30-second request execution limit.
 
 Local development:
 
@@ -336,7 +354,7 @@ sudo systemctl reload nginx
 
 ## Privacy
 
-When a processor URL and algorithm identifier are configured, original uploaded
+When a processor URL is configured and CV Native is selected, original uploaded
 files are sent to that processor before browser fallback. The current backend
 keeps uploads in request memory and does not persist them. Deployments must use
 HTTPS and explicit CORS origins. With no processor configuration, all image

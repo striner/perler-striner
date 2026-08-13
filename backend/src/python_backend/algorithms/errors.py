@@ -37,6 +37,11 @@ class AlgorithmTimeoutError(BackendError):
     public_message = "algorithm execution timed out"
 
 
+class AlgorithmProcessingError(BackendError):
+    status_code = 422
+    public_message = "image could not be processed reliably"
+
+
 class BackendBusyError(BackendError):
     status_code = 503
     public_message = "backend request queue is full"

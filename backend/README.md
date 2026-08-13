@@ -4,10 +4,11 @@ This subproject is the GPU-ready processing framework for Perler Striner. It
 uses FastAPI for HTTP concerns and BentoML as the serving boundary for future
 GPU workers, resource allocation, concurrency limits, batching, and replicas.
 
-No production image algorithm is included. The production registry is empty;
-`POST /api/v1/process` therefore returns `501` with
-`exec: "AlgorithmNotImplementedError"`. The frontend treats that response as a
-signal to run its browser fallback.
+The production registry includes `cv_native@1.0.0`, a deterministic CPU-only
+OpenCV algorithm. It performs conservative foreground extraction, mask repair,
+foreground edge sharpening with an optional light adaptive outline, and mask-aware
+target-grid sampling. It may cluster border samples to model the background, but it does not
+quantize output colors with K-Means or a bead palette.
 
 ## Install
 
@@ -34,13 +35,15 @@ BentoML entry:
 
 Copy `.env.example` to `.env` when local overrides are needed. CORS origins,
 upload limits, queue limits, timeouts, worker counts, GPU resource intent, and
-batch settings all use the `PYTHON_BACKEND_` prefix.
+batch settings all use the `PYTHON_BACKEND_` prefix. CV Native also supports
+`MAX_DECODED_PIXELS`, `CV_WORK_MAX_EDGE`, `CV_MAX_CONCURRENCY`, and
+`CV_OPENCV_THREADS` under that prefix.
 
 ## API
 
 - `GET /health`: liveness and registered-algorithm count.
-- `GET /api/v1/algorithms`: registered algorithm capabilities. It is empty in
-  the current production assembly.
+- `GET /api/v1/algorithms`: registered algorithm capabilities, currently
+  `cv_native@1.0.0`.
 - `POST /api/v1/process`: multipart processing contract.
 
 Processing fields:
@@ -54,6 +57,28 @@ Processing fields:
 | `algorithm_version` | no | Exact registered version |
 | `algorithm_params` | no | JSON object; defaults to `{}` |
 
+### CV Native parameters
+
+All CV Native controls are optional and are passed inside `algorithm_params`.
+The capability endpoint exposes the same schema and defaults.
+
+| Parameter | Default | Allowed range |
+| :-- | --: | :-- |
+| `background_recovery_distance` | `6` | `0` to `40` |
+| `coarse_subject_count` | `1` | integer `1` to `5` |
+| `protection_scale` | `2` | `1` to `4` |
+| `foreground_seed_distance` | `28` | `0` to `80` |
+| `edge_seed_threshold` | `56` | `0` to `255` |
+| `saturation_seed_threshold` | `18` | `0` to `255` |
+| `protection_dilation_radius` | `2` | integer `0` to `12` |
+| `recovery_neighborhood_ratio` | `0.014` | `0.002` to `0.05` |
+| `foreground_coverage_threshold` | `0.2` | `0.05` to `0.8` |
+| `edge_strength` | `0.65` | `0` to `1.5` |
+| `outline_strength` | `0.1` | `0` to `0.3` |
+
+Background removal is mandatory and has no disable parameter. Invalid,
+out-of-range, unknown, or non-finite values return the standard error envelope.
+
 `remove_background` is deliberately not accepted. Every future algorithm must
 remove the background and return a row-major RGBA grid. Algorithm parameters
 cannot disable that invariant.
@@ -62,10 +87,16 @@ All JSON responses use this envelope:
 
 ```json
 {
-  "code": 501,
-  "msg": "requested algorithm is not registered",
-  "data": null,
-  "exec": "AlgorithmNotImplementedError",
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "version": 1,
+    "width": 87,
+    "height": 87,
+    "rgba_base64": "...",
+    "algorithm": {"id": "cv_native", "version": "1.0.0"}
+  },
+  "exec": null,
   "meta": {
     "accept_id": "request-uuid",
     "perf_time_use": 1.25
@@ -73,7 +104,7 @@ All JSON responses use this envelope:
 }
 ```
 
-## Adding An Algorithm Later
+## Adding Another Algorithm
 
 1. Create an algorithm package outside the shared Web and schema packages.
 2. Implement `AlgorithmService` using the shared `AlgorithmInput` and

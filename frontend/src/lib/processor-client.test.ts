@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { GridSource, RgbaGrid } from "./grid";
 import {
   acquireGrid,
+  cvNativeAlgorithmParams,
+  DEFAULT_CV_NATIVE_HYPERPARAMETERS,
   parseGridEnvelope,
   readProcessorConfig,
   requestBackendGrid,
@@ -39,19 +41,41 @@ function envelope(overrides: Record<string, unknown> = {}) {
 }
 
 describe("readProcessorConfig", () => {
-  it("requires both a URL and an algorithm", () => {
-    expect(readProcessorConfig({ PUBLIC_PROCESSOR_API_URL: "https://api.example" })).toBeNull();
-    expect(readProcessorConfig({ PUBLIC_PROCESSOR_ALGORITHM: "subject-grid" })).toBeNull();
+  it("requires a URL and defaults to cv_native", () => {
+    expect(
+      readProcessorConfig({ PUBLIC_PROCESSOR_API_URL: "https://api.example" })
+    ).toMatchObject({
+      algorithm: "cv_native",
+      timeoutMs: 35_000,
+    });
+    expect(readProcessorConfig({})).toBeNull();
   });
 
   it("rejects background-removal controls in algorithm params", () => {
     expect(
       readProcessorConfig({
         PUBLIC_PROCESSOR_API_URL: "https://api.example",
-        PUBLIC_PROCESSOR_ALGORITHM: "subject-grid",
         PUBLIC_PROCESSOR_ALGORITHM_PARAMS: '{"nested":{"remove_background":false}}',
       })
     ).toBeNull();
+  });
+});
+
+describe("cvNativeAlgorithmParams", () => {
+  it("maps the complete UI state to the backend snake-case contract", () => {
+    expect(cvNativeAlgorithmParams(DEFAULT_CV_NATIVE_HYPERPARAMETERS)).toEqual({
+      edge_strength: 0.65,
+      outline_strength: 0.1,
+      background_recovery_distance: 6,
+      coarse_subject_count: 1,
+      protection_scale: 2,
+      foreground_seed_distance: 28,
+      edge_seed_threshold: 56,
+      saturation_seed_threshold: 18,
+      protection_dilation_radius: 2,
+      recovery_neighborhood_ratio: 0.014,
+      foreground_coverage_threshold: 0.2,
+    });
   });
 });
 
@@ -112,6 +136,28 @@ describe("requestBackendGrid", () => {
     expect(result?.width).toBe(1);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
+
+  it("sends exposed cv_native hyperparameters as algorithm_params", async () => {
+    const algorithmParams = cvNativeAlgorithmParams(DEFAULT_CV_NATIVE_HYPERPARAMETERS);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body as FormData;
+      expect(JSON.parse(String(body.get("algorithm_params")))).toEqual(algorithmParams);
+      return new Response(JSON.stringify(envelope()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await requestBackendGrid(
+      new File(["image"], "source.png", { type: "image/png" }),
+      1,
+      1,
+      { ...config, algorithmParams },
+      new AbortController().signal,
+      fetchImpl
+    );
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
 });
 
 describe("acquireGrid", () => {
@@ -136,7 +182,7 @@ describe("acquireGrid", () => {
       localProcessor,
     });
 
-    expect(result).toBe(localGrid);
+    expect(result).toEqual({ grid: localGrid, source: "browser", fellBack: true });
     expect(localProcessor).toHaveBeenCalledOnce();
   });
 
@@ -156,7 +202,7 @@ describe("acquireGrid", () => {
       signal: new AbortController().signal,
       localProcessor,
     });
-    expect(result).toBe(localGrid);
+    expect(result).toEqual({ grid: localGrid, source: "browser", fellBack: false });
   });
 
   it.each([
@@ -183,7 +229,7 @@ describe("acquireGrid", () => {
       localProcessor,
     });
 
-    expect(result).toBe(localGrid);
+    expect(result).toEqual({ grid: localGrid, source: "browser", fellBack: true });
     expect(localProcessor).toHaveBeenCalledOnce();
   });
 
@@ -212,7 +258,7 @@ describe("acquireGrid", () => {
       localProcessor,
     });
 
-    expect(result).toBe(localGrid);
+    expect(result).toEqual({ grid: localGrid, source: "browser", fellBack: true });
     expect(localProcessor).toHaveBeenCalledOnce();
   });
 
