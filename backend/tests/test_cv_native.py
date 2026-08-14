@@ -22,6 +22,9 @@ from python_backend.algorithms.cv_native.edges import enhance_foreground_edges
 from python_backend.algorithms.cv_native.params import CvNativeParams
 from python_backend.algorithms.cv_native.pipeline import run_pipeline
 from python_backend.algorithms.cv_native.segmentation import (
+    _build_dark_subject_candidate,
+    _fuse_dark_subject_candidate,
+    _mask_confidence,
     _restore_multiscale_subject,
     repair_mask,
 )
@@ -124,6 +127,46 @@ def test_multiscale_recovery_expands_only_when_cleanup_eroded_protected_subject(
 
     assert np.all(recovered[18:62, 18:62] == 255)
     assert np.all(recovered[:12, :] == 0)
+
+
+def test_dark_subject_candidate_requires_centered_bounded_contrast() -> None:
+    centered = np.full((120, 160, 3), 225, dtype=np.uint8)
+    cv2.ellipse(centered, (80, 64), (44, 34), 0, 0, 360, (30, 30, 30), -1)
+    candidate = _build_dark_subject_candidate(centered, 40, 30)
+
+    edge_background = np.full((120, 160, 3), 225, dtype=np.uint8)
+    edge_background[:58, :] = 30
+    rejected = _build_dark_subject_candidate(edge_background, 40, 30)
+
+    assert np.count_nonzero(candidate) > centered.shape[0] * centered.shape[1] * 0.15
+    assert candidate[64, 80] == 255
+    assert np.count_nonzero(rejected) == 0
+
+
+def test_dark_subject_fusion_discards_distant_false_positive_components() -> None:
+    mask = np.zeros((80, 120), dtype=np.uint8)
+    mask[24:58, 42:78] = 255
+    mask[4:8, :] = 255
+    dark_subject = np.zeros_like(mask)
+    dark_subject[28:54, 46:74] = 255
+
+    fused = _fuse_dark_subject_candidate(mask, dark_subject, 30, 20)
+
+    assert np.all(fused[28:54, 46:74] == 255)
+    assert np.count_nonzero(fused[4:8, :]) == 0
+
+
+def test_dark_subject_evidence_replaces_incorrect_grabcut_foreground_seed() -> None:
+    mask = np.zeros((20, 20), dtype=np.uint8)
+    mask[6:16, 6:16] = 255
+    trimap = np.full((20, 20), cv2.GC_PR_BGD, dtype=np.uint8)
+    trimap[1:4, 1:4] = cv2.GC_FGD
+    trimap[0, 0] = cv2.GC_BGD
+    evidence = np.zeros_like(mask)
+    evidence[7:15, 7:15] = 255
+
+    assert _mask_confidence(mask, trimap) == 0.0
+    assert _mask_confidence(mask, trimap, evidence) == 1.0
 
 
 def test_cat_floor_acceptance_fixture() -> None:

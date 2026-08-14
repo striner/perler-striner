@@ -70,6 +70,11 @@ def segment_foreground(
     ).astype(np.uint8)
     mask = repair_mask(mask, target_width, target_height)
     if color_prior is not None:
+        dark_subject = _build_dark_subject_candidate(
+            image,
+            target_width,
+            target_height,
+        )
         protection = _build_multiscale_protection(
             image,
             color_prior.background_distance,
@@ -99,10 +104,16 @@ def segment_foreground(
             color_prior.background_distance,
             params,
         )
+        mask = _fuse_dark_subject_candidate(
+            mask,
+            dark_subject,
+            target_width,
+            target_height,
+        )
     coverage = float(np.count_nonzero(mask)) / mask.size
     if coverage < 0.002 or coverage > 0.985:
         raise AlgorithmProcessingError("foreground mask confidence is too low")
-    confidence = _mask_confidence(mask, trimap)
+    confidence = _mask_confidence(mask, trimap, dark_subject if color_prior is not None else None)
     if confidence < 0.08:
         raise AlgorithmProcessingError("foreground mask confidence is too low")
     return SegmentationResult(mask=mask, confidence=confidence)
@@ -212,6 +223,107 @@ def _dominant_color_foreground_seed(
         cv2.MORPH_CLOSE,
         np.ones((3, 3), np.uint8),
     )
+
+
+def _build_dark_subject_candidate(
+    image: np.ndarray,
+    target_width: int,
+    target_height: int,
+) -> np.ndarray:
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (0, 0), 2.0)
+    _, dark = cv2.threshold(
+        blurred,
+        0,
+        255,
+        cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU,
+    )
+    cell_width = image.shape[1] / max(1, target_width)
+    cell_height = image.shape[0] / max(1, target_height)
+    kernel_size = max(3, round(min(cell_width, cell_height) * 0.6))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    dark = cv2.morphologyEx(
+        dark,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)),
+    )
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
+    height, width = dark.shape
+    y_coordinates, x_coordinates = np.ogrid[:height, :width]
+    center_support = (
+        ((x_coordinates - (width - 1) / 2) / max(1.0, width * 0.44)) ** 2
+        + ((y_coordinates - (height - 1) / 2) / max(1.0, height * 0.46)) ** 2
+        <= 1.0
+    )
+    contrast_kernel = np.ones((15, 15), np.uint8)
+    candidates: list[tuple[float, int]] = []
+    for label in range(1, count):
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        area_ratio = area / dark.size
+        if not 0.12 <= area_ratio <= 0.55:
+            continue
+
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        component_width = int(stats[label, cv2.CC_STAT_WIDTH])
+        component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
+        touched_edges = sum(
+            (
+                x == 0,
+                y == 0,
+                x + component_width == width,
+                y + component_height == height,
+            )
+        )
+        if touched_edges > 2:
+            continue
+
+        component = labels == label
+        center_ratio = float(np.count_nonzero(component & center_support)) / area
+        if center_ratio < 0.35:
+            continue
+
+        neighborhood = cv2.dilate(component.astype(np.uint8), contrast_kernel) > 0
+        exterior = neighborhood & ~component
+        if not exterior.any():
+            continue
+        local_contrast = float(np.mean(gray[exterior]) - np.mean(gray[component]))
+        if local_contrast < 30.0:
+            continue
+
+        score = area * center_ratio * local_contrast / (1.0 + 0.2 * touched_edges)
+        candidates.append((score, label))
+
+    output = np.zeros_like(dark)
+    if candidates:
+        _, selected_label = max(candidates)
+        output[labels == selected_label] = 255
+    return output
+
+
+def _fuse_dark_subject_candidate(
+    mask: np.ndarray,
+    dark_subject: np.ndarray,
+    target_width: int,
+    target_height: int,
+) -> np.ndarray:
+    if not np.any(dark_subject):
+        return mask
+
+    cell_width = mask.shape[1] / max(1, target_width)
+    cell_height = mask.shape[0] / max(1, target_height)
+    radius = max(1, round(min(cell_width, cell_height) * 2.0))
+    neighborhood = cv2.dilate(
+        dark_subject,
+        cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (radius * 2 + 1, radius * 2 + 1),
+        ),
+    )
+    nearby_mask = cv2.bitwise_and(mask, neighborhood)
+    return cv2.bitwise_or(dark_subject, nearby_mask)
 
 
 def _deterministic_color_centers(
@@ -551,8 +663,16 @@ def _fill_small_mask_holes(mask: np.ndarray, maximum_area: int) -> np.ndarray:
     return output
 
 
-def _mask_confidence(mask: np.ndarray, trimap: np.ndarray) -> float:
-    foreground_seed = trimap == cv2.GC_FGD
+def _mask_confidence(
+    mask: np.ndarray,
+    trimap: np.ndarray,
+    foreground_evidence: np.ndarray | None = None,
+) -> float:
+    foreground_seed = (
+        foreground_evidence > 0
+        if foreground_evidence is not None and np.any(foreground_evidence)
+        else trimap == cv2.GC_FGD
+    )
     background_seed = trimap == cv2.GC_BGD
     foreground_score = float(np.mean(mask[foreground_seed] > 0)) if foreground_seed.any() else 0.5
     background_score = float(np.mean(mask[background_seed] == 0)) if background_seed.any() else 0.5
