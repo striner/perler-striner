@@ -45,3 +45,8 @@ class AlgorithmProcessingError(BackendError):
 class BackendBusyError(BackendError):
     status_code = 503
     public_message = "backend request queue is full"
+
+
+class AlgorithmUnavailableError(BackendError):
+    status_code = 503
+    public_message = "requested algorithm is unavailable"

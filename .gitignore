@@ -41,3 +41,7 @@ log/
 picture/
 zip/
 *.tar.gz
+
+# downloaded model artifacts; keep the reproducible download manifest
+data/model/*
+!data/model/download.md

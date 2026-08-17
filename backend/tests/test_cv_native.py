@@ -336,9 +336,10 @@ def test_production_registry_and_real_api() -> None:
         )
 
     items = capabilities.json()["data"]["items"]
-    assert len(items) == 1
-    assert items[0]["id"] == "cv_native"
-    assert items[0]["requires_gpu"] is False
+    assert {item["id"] for item in items} == {"cv_native", "tiny_model"}
+    cv_capability = next(item for item in items if item["id"] == "cv_native")
+    assert cv_capability["requires_gpu"] is False
+    assert cv_capability["available"] is True
     assert response.status_code == 200
     payload = response.json()
     assert payload["exec"] is None

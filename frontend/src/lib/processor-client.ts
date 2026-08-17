@@ -9,7 +9,16 @@ export interface ProcessorConfig {
   timeoutMs: number;
 }
 
-export type ProcessingMode = "cv_native" | "browser_native";
+export type ProcessingMode = "cv_native" | "tiny_model" | "browser_native";
+
+export interface ProcessorCapability {
+  id: string;
+  version: string;
+  available: boolean;
+  unavailableReason: string | null;
+}
+
+export type TinyModelPromptError = "too_many_phrases" | "phrase_too_long";
 
 export interface CvNativeHyperparameters {
   edgeStrength: number;
@@ -55,6 +64,20 @@ export function cvNativeAlgorithmParams(
     recovery_neighborhood_ratio: values.recoveryNeighborhoodRatio,
     foreground_coverage_threshold: values.foregroundCoverageThreshold,
   };
+}
+
+export function tinyModelAlgorithmParams(prompt: string): Record<string, string> {
+  return { prompt: prompt.trim() };
+}
+
+export function validateTinyModelPrompt(prompt: string): TinyModelPromptError | null {
+  const phrases = prompt
+    .split(/[,，\r\n]+/)
+    .map((phrase) => phrase.trim())
+    .filter(Boolean);
+  if (phrases.length > 8) return "too_many_phrases";
+  if (phrases.some((phrase) => phrase.length > 64)) return "phrase_too_long";
+  return null;
 }
 
 export type AcquireGridResult =
@@ -171,26 +194,52 @@ export async function requestBackendGrid(
   }
 }
 
+export async function requestProcessorCapabilities(
+  baseUrl: string,
+  signal: AbortSignal,
+  fetchImpl: typeof fetch = fetch
+): Promise<ProcessorCapability[] | null> {
+  try {
+    const response = await fetchImpl(`${baseUrl.replace(/\/+$/, "")}/api/v1/algorithms`, {
+      signal,
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    if (!isValidSuccessEnvelope(payload) || !isPlainObject(payload.data)) return null;
+    if (!Array.isArray(payload.data.items)) return null;
+    const capabilities: ProcessorCapability[] = [];
+    for (const item of payload.data.items) {
+      if (!isPlainObject(item)) return null;
+      if (
+        typeof item.id !== "string" ||
+        !item.id ||
+        typeof item.version !== "string" ||
+        !item.version ||
+        typeof item.available !== "boolean" ||
+        (item.unavailable_reason !== null && typeof item.unavailable_reason !== "string")
+      ) {
+        return null;
+      }
+      capabilities.push({
+        id: item.id,
+        version: item.version,
+        available: item.available,
+        unavailableReason: item.unavailable_reason,
+      });
+    }
+    return capabilities;
+  } catch {
+    return null;
+  }
+}
+
 export function parseGridEnvelope(
   payload: unknown,
   expectedWidth: number,
   expectedHeight: number,
   config: Pick<ProcessorConfig, "algorithm" | "algorithmVersion">
 ): RgbaGrid | null {
-  if (!isPlainObject(payload)) return null;
-  if (payload.code !== 200 || typeof payload.msg !== "string" || payload.exec !== null) {
-    return null;
-  }
-  if (!isPlainObject(payload.meta)) return null;
-  if (
-    typeof payload.meta.accept_id !== "string" ||
-    !payload.meta.accept_id ||
-    typeof payload.meta.perf_time_use !== "number" ||
-    !Number.isFinite(payload.meta.perf_time_use) ||
-    payload.meta.perf_time_use < 0
-  ) {
-    return null;
-  }
+  if (!isValidSuccessEnvelope(payload)) return null;
 
   const data = payload.data;
   if (!isPlainObject(data) || data.version !== 1) return null;
@@ -205,6 +254,26 @@ export function parseGridEnvelope(
   const bytes = decodeBase64(data.rgba_base64);
   if (!bytes || bytes.length !== expectedWidth * expectedHeight * 4) return null;
   return { width: expectedWidth, height: expectedHeight, data: new Uint8ClampedArray(bytes) };
+}
+
+function isValidSuccessEnvelope(
+  payload: unknown
+): payload is Record<string, unknown> & {
+  data: unknown;
+  meta: { accept_id: string; perf_time_use: number };
+} {
+  if (!isPlainObject(payload)) return false;
+  if (payload.code !== 200 || typeof payload.msg !== "string" || payload.exec !== null) {
+    return false;
+  }
+  if (!isPlainObject(payload.meta)) return false;
+  return (
+    typeof payload.meta.accept_id === "string" &&
+    Boolean(payload.meta.accept_id) &&
+    typeof payload.meta.perf_time_use === "number" &&
+    Number.isFinite(payload.meta.perf_time_use) &&
+    payload.meta.perf_time_use >= 0
+  );
 }
 
 function decodeBase64(value: string): Uint8Array | null {

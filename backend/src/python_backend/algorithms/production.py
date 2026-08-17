@@ -4,6 +4,7 @@ from python_backend.core.config import Settings
 
 def build_production_registry(settings: Settings) -> AlgorithmRegistry:
     from python_backend.algorithms.cv_native import CvNativeService
+    from python_backend.algorithms.tiny_model import build_tiny_model_service
 
     return AlgorithmRegistry(
         [
@@ -13,6 +14,7 @@ def build_production_registry(settings: Settings) -> AlgorithmRegistry:
                 max_concurrency=settings.cv_max_concurrency,
                 opencv_threads=settings.cv_opencv_threads,
                 queue_timeout_seconds=settings.queue_timeout_seconds,
-            )
+            ),
+            build_tiny_model_service(settings),
         ]
     )

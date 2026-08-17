@@ -59,7 +59,8 @@
 ## 模型与运行时约束
 
 - 模型文件不得提交到 Git，不得在请求路径自动下载；通过显式安装/预取流程和配置的本地模型目录管理，并校验版本、哈希和许可证。
-- 候选组合为 YOLO-World Nano 文本开放集检测 + MobileSAM 轻量分割，但模型工件、实际体积、许可证和 Prompt 编码依赖仍需验证；若候选工件不可获取或不满足许可证/效果要求，允许替换为实际可获取且兼容的轻量模型。
+- 经公开工件验证，未找到可确认来源的 `ultralytics/yolo-world-nano`。POC 锁定实际可获取的 `yolov8s-worldv2.pt`（25,923,032 字节）+ `mobile_sam.pt`（40,728,226 字节），动态 Prompt 还必须使用 CLIP `ViT-B-32.pt` 文本编码器（353,976,522 字节），完整权重为 420,627,780 字节（约 401 MiB）。精确链接和 SHA-256 记录在 `data/model/download.md`。
+- 当前 Ultralytics 运行库和分发的 YOLO-World 工件采用 AGPL-3.0，原 YOLO-World 项目为 GPL-3.0，MobileSAM 为 Apache-2.0，OpenAI CLIP 为 MIT。POC 可继续技术验证，但在超出演示/评估环境前，部署方必须确认 AGPL-3.0 与实际分发模式兼容；不再沿用未经验证的“整套约 35MB”估算。
 - POC 生产运行时采用 NVIDIA CUDA GPU + PyTorch。生产默认且仅承诺 `cuda` 设备；CUDA、显存不足或 PyTorch 模型加载失败时视为后端不可用，自动回退浏览器，不得在生产环境静默降级到 CPU。
 - 开发环境允许通过显式配置启用 `cpu` 调试设备，以验证模型加载、Prompt 检测、NMS、分割、Mask 合并、透明边裁切、边缘增强、像素化、HTTP 契约和回退链路。CPU 调试使用 FP32，并禁用 CUDA autocast、FP16、CUDA 预热和显存统计；不承诺 CPU 性能，也不将 CPU 结果作为 CUDA 算子兼容性、显存、并发或 `3` 秒性能验收依据。Intel XPU 和 DirectML 仍不在本阶段范围内。
 - 单个服务进程常驻一份模型，每张 GPU 默认推理并发为 `1`，其他请求排队；首版不实现动态批处理。模型推理不得阻塞 ASGI 事件循环，必须有受控的线程/执行器、输入尺寸、队列和超时边界。

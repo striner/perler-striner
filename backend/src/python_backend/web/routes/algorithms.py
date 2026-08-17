@@ -23,6 +23,8 @@ async def list_algorithms(
             requires_gpu=descriptor.requires_gpu,
             supports_batching=descriptor.supports_batching,
             removes_background=descriptor.removes_background,
+            available=descriptor.available,
+            unavailable_reason=descriptor.unavailable_reason,
             parameter_schema=dict(descriptor.parameter_schema),
         )
         for descriptor in registry.descriptors()

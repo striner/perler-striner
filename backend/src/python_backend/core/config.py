@@ -1,7 +1,11 @@
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[4] / "data" / "model"
 
 
 class Settings(BaseSettings):
@@ -25,6 +29,12 @@ class Settings(BaseSettings):
     cv_work_max_edge: int = Field(default=1024, ge=128, le=4096)
     cv_max_concurrency: int = Field(default=2, ge=1, le=64)
     cv_opencv_threads: int = Field(default=1, ge=1, le=64)
+    tiny_model_enabled: bool = True
+    tiny_model_device: Literal["cuda", "cpu"] = "cuda"
+    tiny_model_dir: Path = DEFAULT_MODEL_DIR
+    tiny_model_max_concurrency: int = Field(default=1, ge=1, le=1)
+    tiny_model_work_max_edge: int = Field(default=1280, ge=320, le=4096)
+    tiny_model_warmup: bool = True
     bento_workers: int = Field(default=1, ge=1)
     bento_replicas: int = Field(default=1, ge=1)
     bento_max_concurrency: int = Field(default=32, ge=1)

@@ -51,6 +51,8 @@ class AlgorithmDescriptor:
     requires_gpu: bool = True
     supports_batching: bool = True
     removes_background: bool = True
+    available: bool = True
+    unavailable_reason: str | None = None
 
 
 @runtime_checkable

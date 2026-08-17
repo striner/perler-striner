@@ -29,6 +29,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { ui, type Locale } from "@/i18n/ui";
 import { type RgbaGrid } from "@/lib/grid";
 import { BRANDS, type BrandId } from "@/lib/palette";
@@ -38,7 +39,11 @@ import {
   cvNativeAlgorithmParams,
   DEFAULT_CV_NATIVE_HYPERPARAMETERS,
   readProcessorConfig,
+  requestProcessorCapabilities,
+  tinyModelAlgorithmParams,
+  validateTinyModelPrompt,
   type CvNativeHyperparameters,
+  type ProcessorCapability,
   type ProcessingMode,
 } from "@/lib/processor-client";
 import { patternRenderSize, renderExport, renderPattern } from "@/lib/render";
@@ -145,6 +150,13 @@ export default function PerlerStudio({
   const [processingMode, setProcessingMode] =
     useState<ProcessingMode>("browser_native");
   const [fallbackNotice, setFallbackNotice] = useState(0);
+  const [subjectPrompt, setSubjectPrompt] = useState("");
+  const [processorCapabilities, setProcessorCapabilities] = useState<
+    ProcessorCapability[] | null
+  >(null);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(
+    Boolean(PROCESSOR_CONFIG)
+  );
   const [hyperparameters, setHyperparameters] = useState<CvNativeHyperparameters>(
     DEFAULT_CV_NATIVE_HYPERPARAMETERS
   );
@@ -174,6 +186,20 @@ export default function PerlerStudio({
 
   useEffect(() => {
     return () => requestControllerRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!PROCESSOR_CONFIG) return;
+    const controller = new AbortController();
+    setCapabilitiesLoading(true);
+    void requestProcessorCapabilities(PROCESSOR_CONFIG.baseUrl, controller.signal).then(
+      (capabilities) => {
+        if (controller.signal.aborted) return;
+        setProcessorCapabilities(capabilities);
+        setCapabilitiesLoading(false);
+      }
+    );
+    return () => controller.abort();
   }, []);
 
   const loadFile = useCallback(async (file: File) => {
@@ -214,6 +240,31 @@ export default function PerlerStudio({
     setGenerationState(source ? "dirty" : "empty");
   }, [source]);
 
+  const tinyModelCapability = processorCapabilities?.find(
+    (capability) => capability.id === "tiny_model" && capability.version === "1.0.0"
+  );
+  const tinyModelAvailable = Boolean(PROCESSOR_CONFIG && tinyModelCapability?.available);
+  const tinyModelPromptError = validateTinyModelPrompt(subjectPrompt);
+  const tinyModelUnavailableMessage = !PROCESSOR_CONFIG
+    ? t.tinyModelNotConfigured
+    : capabilitiesLoading
+      ? t.tinyModelChecking
+      : processorCapabilities === null
+        ? t.tinyModelBackendUnavailable
+        : !tinyModelCapability
+          ? t.tinyModelNotRegistered
+          : !tinyModelCapability.available
+            ? t.tinyModelUnavailable(
+                tinyModelCapability.unavailableReason || t.tinyModelBackendUnavailable
+              )
+            : null;
+  const processingModeLabel =
+    processingMode === "cv_native"
+      ? t.cvNative
+      : processingMode === "tiny_model"
+        ? t.tinyModel
+        : t.browserNative;
+
   const generate = useCallback(async () => {
     if (!source || generationState === "generating") return;
     const w = Math.min(beadsAcross, MAX_BEADS);
@@ -224,16 +275,25 @@ export default function PerlerStudio({
     const requestId = ++requestIdRef.current;
     const controller = new AbortController();
     requestControllerRef.current = controller;
-    const config =
-      processingMode === "cv_native" && PROCESSOR_CONFIG
-        ? {
-            ...PROCESSOR_CONFIG,
-            algorithmParams: {
-              ...PROCESSOR_CONFIG.algorithmParams,
-              ...cvNativeAlgorithmParams(hyperparameters),
-            },
-          }
-        : null;
+    let config = null;
+    if (processingMode === "cv_native" && PROCESSOR_CONFIG) {
+      config = {
+        ...PROCESSOR_CONFIG,
+        algorithm: "cv_native",
+        algorithmVersion: "1.0.0",
+        algorithmParams: {
+          ...PROCESSOR_CONFIG.algorithmParams,
+          ...cvNativeAlgorithmParams(hyperparameters),
+        },
+      };
+    } else if (processingMode === "tiny_model" && PROCESSOR_CONFIG && tinyModelAvailable) {
+      config = {
+        ...PROCESSOR_CONFIG,
+        algorithm: "tiny_model",
+        algorithmVersion: "1.0.0",
+        algorithmParams: tinyModelAlgorithmParams(subjectPrompt),
+      };
+    }
 
     setFallbackNotice(0);
     setGridImage(null);
@@ -271,6 +331,8 @@ export default function PerlerStudio({
     processingMode,
     hyperparameters,
     removeBackground,
+    subjectPrompt,
+    tinyModelAvailable,
   ]);
 
   // Palette matching and dithering remain entirely in the frontend.
@@ -524,18 +586,56 @@ export default function PerlerStudio({
                 }}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {processingMode === "cv_native" ? t.cvNative : t.browserNative}
-                  </SelectValue>
+                  <SelectValue>{processingModeLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cv_native" disabled={!PROCESSOR_CONFIG}>
                     {t.cvNative}
                   </SelectItem>
+                  <SelectItem value="tiny_model" disabled={!tinyModelAvailable}>
+                    {t.tinyModel}
+                  </SelectItem>
                   <SelectItem value="browser_native">{t.browserNative}</SelectItem>
                 </SelectContent>
               </Select>
+              {tinyModelUnavailableMessage && (
+                <p className="text-xs leading-relaxed text-muted-foreground" role="status">
+                  {tinyModelUnavailableMessage}
+                </p>
+              )}
             </div>
+            {processingMode === "tiny_model" && (
+              <div className="space-y-2">
+                <Label htmlFor="tiny-model-prompt">{t.subjectPrompt}</Label>
+                <Textarea
+                  id="tiny-model-prompt"
+                  value={subjectPrompt}
+                  maxLength={520}
+                  rows={3}
+                  disabled={controlsLocked}
+                  placeholder={t.subjectPromptPlaceholder}
+                  aria-invalid={Boolean(tinyModelPromptError)}
+                  aria-describedby={
+                    tinyModelPromptError ? "tiny-model-prompt-error" : undefined
+                  }
+                  onChange={(event) => {
+                    setSubjectPrompt(event.target.value);
+                    invalidateGeneration();
+                  }}
+                />
+                {tinyModelPromptError && (
+                  <p
+                    id="tiny-model-prompt-error"
+                    className="text-xs text-destructive"
+                    role="alert"
+                  >
+                    {tinyModelPromptError === "too_many_phrases"
+                      ? t.promptTooMany
+                      : t.promptTooLong}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>{t.brand}</Label>
               <Select
@@ -639,7 +739,12 @@ export default function PerlerStudio({
             <Separator />
             <Button
               className="w-full"
-              disabled={!source || generationState === "generating"}
+              disabled={
+                !source ||
+                generationState === "generating" ||
+                (processingMode === "tiny_model" &&
+                  (!tinyModelAvailable || Boolean(tinyModelPromptError)))
+              }
               onClick={generationState === "ready" ? download : generate}
             >
               {generationState === "generating" ? (

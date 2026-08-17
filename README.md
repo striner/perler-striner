@@ -18,11 +18,18 @@ Image upload and processing-parameter changes mark the current result as stale.
 Processing starts only when the user selects **Generate**; while it runs, related
 controls are locked. Once the pattern is ready, the same action becomes **Download**.
 CV Native exposes its supported controls in a separate **Hyperparameters** panel.
+Tiny Model remains visible in the mode list and is enabled only when the backend reports
+that its model runtime is available; it supports optional multi-subject text Prompts.
 
 The backend registers `cv_native@1.0.0`, a CPU-only OpenCV pipeline. It removes
 backgrounds with a conservative GrabCut mask, visually sharpens foreground edges,
 and returns an exact-size RGBA grid. Bead-palette quantization remains entirely in
 the frontend.
+
+The optional `tiny_model@1.0.0` pipeline uses YOLO-World for open-vocabulary detection
+and MobileSAM for segmentation. It removes transparent padding and scales the retained
+subject proportionally into the target frame before edge enhancement and grid sampling.
+Production targets CUDA; explicit FP32 CPU mode is available for functional development.
 
 ## Quick Start
 
@@ -48,7 +55,7 @@ See [frontend/README.md](frontend/README.md) and
 
 ## Privacy
 
-When a processor URL is configured and CV Native is selected, an uploaded image
+When a processor URL is configured and a backend mode is selected, an uploaded image
 is sent to that backend before local processing. The backend framework
 does not persist uploads. Deployments must use HTTPS and configure explicit
 CORS origins. Without backend configuration, or whenever the request fails,

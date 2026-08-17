@@ -31,6 +31,8 @@ class AlgorithmCapabilityData(BaseModel):
     requires_gpu: bool
     supports_batching: bool
     removes_background: bool
+    available: bool
+    unavailable_reason: str | None
     parameter_schema: dict[str, Any]
 
 

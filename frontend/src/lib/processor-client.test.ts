@@ -8,6 +8,9 @@ import {
   parseGridEnvelope,
   readProcessorConfig,
   requestBackendGrid,
+  requestProcessorCapabilities,
+  tinyModelAlgorithmParams,
+  validateTinyModelPrompt,
   type ProcessorConfig,
 } from "./processor-client";
 
@@ -76,6 +79,83 @@ describe("cvNativeAlgorithmParams", () => {
       recovery_neighborhood_ratio: 0.014,
       foreground_coverage_threshold: 0.2,
     });
+  });
+});
+
+describe("tiny model parameters", () => {
+  it("trims the prompt and validates phrase limits", () => {
+    expect(tinyModelAlgorithmParams("  person, cat  ")).toEqual({
+      prompt: "person, cat",
+    });
+    expect(validateTinyModelPrompt("person, cat，painting\ndog")).toBeNull();
+    expect(validateTinyModelPrompt(Array.from({ length: 9 }, (_, index) => index).join(","))).toBe(
+      "too_many_phrases"
+    );
+    expect(validateTinyModelPrompt("x".repeat(65))).toBe("phrase_too_long");
+  });
+});
+
+describe("requestProcessorCapabilities", () => {
+  it("parses algorithm availability and reason", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify(
+          envelope({
+            data: {
+              items: [
+                {
+                  id: "tiny_model",
+                  version: "1.0.0",
+                  available: false,
+                  unavailable_reason: "CUDA is not available",
+                },
+              ],
+            },
+          })
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    ) as typeof fetch;
+
+    await expect(
+      requestProcessorCapabilities(
+        "https://processor.example/",
+        new AbortController().signal,
+        fetchImpl
+      )
+    ).resolves.toEqual([
+      {
+        id: "tiny_model",
+        version: "1.0.0",
+        available: false,
+        unavailableReason: "CUDA is not available",
+      },
+    ]);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://processor.example/api/v1/algorithms",
+      expect.any(Object)
+    );
+  });
+
+  it("rejects malformed capabilities and network failures", async () => {
+    const malformed = vi.fn(async () =>
+      new Response(
+        JSON.stringify(
+          envelope({
+            data: {
+              items: [{ id: "tiny_model", version: "1.0.0", available: "yes" }],
+            },
+          })
+        )
+      )
+    ) as typeof fetch;
+    const offline = vi.fn(async () => Promise.reject(new TypeError("offline"))) as typeof fetch;
+    await expect(
+      requestProcessorCapabilities("https://processor.example", new AbortController().signal, malformed)
+    ).resolves.toBeNull();
+    await expect(
+      requestProcessorCapabilities("https://processor.example", new AbortController().signal, offline)
+    ).resolves.toBeNull();
   });
 });
 
