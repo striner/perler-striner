@@ -32,6 +32,9 @@ const en = {
   widthBeads: "Width in beads",
   zoom: "Zoom",
   dithering: "Dithering",
+  removeBackground: "Remove background",
+  removeBackgroundDesc:
+    "Protect the main subject first, then clear border-connected background.",
   gridLines: "Grid & pegboard lines",
   generate: "Generate pattern",
   generating: "Generating...",
@@ -96,6 +99,8 @@ const zh: Dict = {
   widthBeads: "宽度（豆数）",
   zoom: "缩放",
   dithering: "仿色（抖动）",
+  removeBackground: "去掉背景",
+  removeBackgroundDesc: "先保护主体轮廓，再清除与边缘连通的背景。",
   gridLines: "网格与拼板参考线",
   generate: "生成图纸",
   generating: "生成中...",

@@ -142,9 +142,8 @@ export default function PerlerStudio({
 }) {
   const t = ui[locale];
   const [source, setSource] = useState<Source | null>(null);
-  const [processingMode, setProcessingMode] = useState<ProcessingMode>(
-    PROCESSOR_CONFIG ? "cv_native" : "browser_native"
-  );
+  const [processingMode, setProcessingMode] =
+    useState<ProcessingMode>("browser_native");
   const [fallbackNotice, setFallbackNotice] = useState(0);
   const [hyperparameters, setHyperparameters] = useState<CvNativeHyperparameters>(
     DEFAULT_CV_NATIVE_HYPERPARAMETERS
@@ -154,6 +153,7 @@ export default function PerlerStudio({
   const [brand, setBrand] = useState<BrandId>("mard221");
   const [beadsAcross, setBeadsAcross] = useState(DEFAULT_BEADS);
   const [dither, setDither] = useState(false);
+  const [removeBackground, setRemoveBackground] = useState(true);
   const [grid, setGrid] = useState(true);
   const [cell, setCell] = useState(14);
   const [highlight, setHighlight] = useState<number | null>(null);
@@ -245,6 +245,7 @@ export default function PerlerStudio({
         file: source.file,
         width: w,
         height: h,
+        removeBackground,
         config,
         signal: controller.signal,
       });
@@ -263,7 +264,14 @@ export default function PerlerStudio({
     } finally {
       if (requestControllerRef.current === controller) requestControllerRef.current = null;
     }
-  }, [source, generationState, beadsAcross, processingMode, hyperparameters]);
+  }, [
+    source,
+    generationState,
+    beadsAcross,
+    processingMode,
+    hyperparameters,
+    removeBackground,
+  ]);
 
   // Palette matching and dithering remain entirely in the frontend.
   useEffect(() => {
@@ -601,6 +609,25 @@ export default function PerlerStudio({
                 onCheckedChange={setDither}
               />
             </div>
+            {processingMode === "browser_native" && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="remove-background">{t.removeBackground}</Label>
+                  <Switch
+                    id="remove-background"
+                    checked={removeBackground}
+                    disabled={controlsLocked}
+                    onCheckedChange={(checked) => {
+                      setRemoveBackground(checked);
+                      invalidateGeneration();
+                    }}
+                  />
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t.removeBackgroundDesc}
+                </p>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <Label htmlFor="grid">{t.gridLines}</Label>
               <Switch

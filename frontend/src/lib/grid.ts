@@ -20,13 +20,15 @@ type BackgroundSample = {
 
 const WHITE_THRESHOLD = 246;
 
-/** Build the local fallback grid and always remove its border-connected background. */
+/** Build a local grid, optionally removing its border-connected background. */
 export function prepareLocalGrid(
   source: GridSource,
   width: number,
-  height: number
+  height: number,
+  removeBackground = true
 ): RgbaGrid {
-  return removeBackgroundFromGrid(downsample(source, width, height));
+  const grid = downsample(source, width, height);
+  return removeBackground ? removeBackgroundFromGrid(grid) : grid;
 }
 
 /** Downscale in halving steps so small grids keep detail instead of aliasing. */

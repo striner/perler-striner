@@ -205,6 +205,54 @@ describe("acquireGrid", () => {
     expect(result).toEqual({ grid: localGrid, source: "browser", fellBack: false });
   });
 
+  it("passes the browser background preference to local processing", async () => {
+    const localGrid: RgbaGrid = {
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray(4),
+    };
+    const source = { image: {} as CanvasImageSource, width: 1, height: 1 };
+    const localProcessor = vi.fn(() => localGrid);
+
+    await acquireGrid({
+      source,
+      file: null,
+      width: 1,
+      height: 1,
+      removeBackground: false,
+      config: null,
+      signal: new AbortController().signal,
+      localProcessor,
+    });
+
+    expect(localProcessor).toHaveBeenCalledWith(source, 1, 1, false);
+  });
+
+  it("forces background removal for backend fallback", async () => {
+    const localGrid: RgbaGrid = {
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray(4),
+    };
+    const source = { image: {} as CanvasImageSource, width: 1, height: 1 };
+    const localProcessor = vi.fn(() => localGrid);
+    const fetchImpl = vi.fn(async () => new Response("", { status: 501 })) as typeof fetch;
+
+    await acquireGrid({
+      source,
+      file: new File(["image"], "source.png", { type: "image/png" }),
+      width: 1,
+      height: 1,
+      removeBackground: false,
+      config,
+      signal: new AbortController().signal,
+      fetchImpl,
+      localProcessor,
+    });
+
+    expect(localProcessor).toHaveBeenCalledWith(source, 1, 1, true);
+  });
+
   it.each([
     ["network error", async () => Promise.reject(new TypeError("offline"))],
     ["empty success body", async () => new Response("", { status: 200 })],

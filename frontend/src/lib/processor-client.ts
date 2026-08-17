@@ -72,6 +72,7 @@ interface AcquireGridOptions {
   file: File | null;
   width: number;
   height: number;
+  removeBackground?: boolean;
   config: ProcessorConfig | null;
   signal: AbortSignal;
   fetchImpl?: typeof fetch;
@@ -124,8 +125,9 @@ export async function acquireGrid(options: AcquireGridOptions): Promise<AcquireG
     if (options.signal.aborted) throw new DOMException("Request aborted", "AbortError");
   }
   if (options.signal.aborted) throw new DOMException("Request aborted", "AbortError");
+  const removeBackground = options.config ? true : (options.removeBackground ?? true);
   return {
-    grid: localProcessor(options.source, options.width, options.height),
+    grid: localProcessor(options.source, options.width, options.height, removeBackground),
     source: "browser",
     fellBack: Boolean(options.file && options.config),
   };

@@ -5,8 +5,9 @@ uses FastAPI for HTTP concerns and BentoML as the serving boundary for future
 GPU workers, resource allocation, concurrency limits, batching, and replicas.
 
 The production registry includes `cv_native@1.0.0`, a deterministic CPU-only
-OpenCV algorithm. It performs conservative foreground extraction, mask repair,
-foreground edge sharpening with an optional light adaptive outline, and mask-aware
+OpenCV algorithm. It performs conservative foreground extraction, a guarded second
+GrabCut pass for strongly centered portraits, mask repair, foreground edge sharpening
+with an optional light adaptive outline, and mask-aware
 target-grid sampling. It may cluster border samples to model the background, but it does not
 quantize output colors with K-Means or a bead palette.
 

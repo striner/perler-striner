@@ -25,6 +25,7 @@ from python_backend.algorithms.cv_native.segmentation import (
     _build_dark_subject_candidate,
     _fuse_dark_subject_candidate,
     _mask_confidence,
+    _refine_centered_portrait,
     _restore_multiscale_subject,
     repair_mask,
 )
@@ -167,6 +168,38 @@ def test_dark_subject_evidence_replaces_incorrect_grabcut_foreground_seed() -> N
 
     assert _mask_confidence(mask, trimap) == 0.0
     assert _mask_confidence(mask, trimap, evidence) == 1.0
+
+
+def test_centered_portrait_refinement_recovers_body_without_side_background() -> None:
+    image = np.full((240, 320, 3), (205, 150, 105), dtype=np.uint8)
+    image[88:118, :] = (150, 145, 140)
+    cv2.ellipse(image, (160, 91), (48, 62), 0, 0, 360, (25, 25, 25), -1)
+    cv2.ellipse(image, (160, 100), (28, 44), 0, 0, 360, (80, 130, 190), -1)
+    cv2.rectangle(image, (150, 130), (170, 164), (80, 130, 190), -1)
+    body = np.array([[112, 144], [208, 144], [290, 239], [30, 239]], np.int32)
+    cv2.fillPoly(image, [body], (195, 175, 150))
+
+    initial_mask = np.zeros((240, 320), dtype=np.uint8)
+    cv2.ellipse(initial_mask, (160, 108), (54, 74), 0, 0, 360, 255, -1)
+    initial_mask[88:118, 20:300] = 255
+    initial_mask[144:205, 122:198] = 255
+    background_distance = np.full(initial_mask.shape, 18.0, dtype=np.float32)
+    background_distance[88:118, :] = 4.0
+
+    result = _refine_centered_portrait(
+        image,
+        initial_mask,
+        background_distance,
+        target_width=80,
+        target_height=60,
+    )
+
+    assert result is not None
+    refined, evidence = result
+    assert refined[210, 160] == 255
+    assert refined[100, 30] == 0
+    assert refined[100, 290] == 0
+    assert np.count_nonzero(evidence) > 100
 
 
 def test_cat_floor_acceptance_fixture() -> None:

@@ -69,51 +69,64 @@ def segment_foreground(
         (trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD), 255, 0
     ).astype(np.uint8)
     mask = repair_mask(mask, target_width, target_height)
+    foreground_evidence = None
     if color_prior is not None:
-        dark_subject = _build_dark_subject_candidate(
-            image,
-            target_width,
-            target_height,
-        )
-        protection = _build_multiscale_protection(
-            image,
-            color_prior.background_distance,
-            target_width,
-            target_height,
-            params,
-        )
-        mask = _retain_supported_components(
+        portrait = _refine_centered_portrait(
             image,
             mask,
-            color_prior.foreground_core,
             color_prior.background_distance,
             target_width,
             target_height,
-            params.foreground_coverage_threshold,
         )
-        mask = _remove_border_background_residue(
-            mask,
-            color_prior.background_distance,
-            color_prior.border_cleanup_threshold,
-            color_prior.foreground_core,
-            color_prior.protect_core_during_cleanup,
-        )
-        mask = _restore_multiscale_subject(
-            mask,
-            protection,
-            color_prior.background_distance,
-            params,
-        )
-        mask = _fuse_dark_subject_candidate(
-            mask,
-            dark_subject,
-            target_width,
-            target_height,
-        )
+        if portrait is not None:
+            mask, foreground_evidence = portrait
+        else:
+            dark_subject = _build_dark_subject_candidate(
+                image,
+                target_width,
+                target_height,
+            )
+            protection = _build_multiscale_protection(
+                image,
+                color_prior.background_distance,
+                target_width,
+                target_height,
+                params,
+            )
+            mask = _retain_supported_components(
+                image,
+                mask,
+                color_prior.foreground_core,
+                color_prior.background_distance,
+                target_width,
+                target_height,
+                params.foreground_coverage_threshold,
+            )
+            mask = _remove_border_background_residue(
+                mask,
+                color_prior.background_distance,
+                color_prior.border_cleanup_threshold,
+                color_prior.foreground_core,
+                color_prior.protect_core_during_cleanup,
+            )
+            mask = _restore_multiscale_subject(
+                mask,
+                protection,
+                color_prior.background_distance,
+                params,
+            )
+            mask = _fuse_dark_subject_candidate(
+                mask,
+                dark_subject,
+                target_width,
+                target_height,
+            )
+            if np.any(dark_subject):
+                foreground_evidence = dark_subject
     coverage = float(np.count_nonzero(mask)) / mask.size
     if coverage < 0.002 or coverage > 0.985:
         raise AlgorithmProcessingError("foreground mask confidence is too low")
-    confidence = _mask_confidence(mask, trimap, dark_subject if color_prior is not None else None)
+    confidence = _mask_confidence(mask, trimap, foreground_evidence)
     if confidence < 0.08:
         raise AlgorithmProcessingError("foreground mask confidence is too low")
     return SegmentationResult(mask=mask, confidence=confidence)
@@ -223,6 +236,185 @@ def _dominant_color_foreground_seed(
         cv2.MORPH_CLOSE,
         np.ones((3, 3), np.uint8),
     )
+
+
+def _refine_centered_portrait(
+    image: np.ndarray,
+    initial_mask: np.ndarray,
+    background_distance: np.ndarray,
+    target_width: int,
+    target_height: int,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    height, width = initial_mask.shape
+    # A large, centered skin-tone component is only an anchor for a second graph cut;
+    # it is not treated as a general person detector.
+    ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
+    luminance, red_chroma, blue_chroma = cv2.split(ycrcb)
+    saturation = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 1]
+    skin = (
+        (red_chroma >= 133)
+        & (red_chroma <= 178)
+        & (blue_chroma >= 75)
+        & (blue_chroma <= 135)
+        & (luminance >= 50)
+        & (saturation >= 15)
+    ).astype(np.uint8)
+    opening_size = _odd_size(max(7, round(min(height, width) * 0.022)))
+    skin = cv2.morphologyEx(
+        skin,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (opening_size, opening_size)),
+    )
+
+    count, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        skin,
+        connectivity=8,
+    )
+    candidates: list[tuple[float, int]] = []
+    image_area = height * width
+    for label in range(1, count):
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        component_width = int(stats[label, cv2.CC_STAT_WIDTH])
+        component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        center_x, center_y = centroids[label]
+        area_ratio = area / image_area
+        aspect_ratio = component_width / max(1, component_height)
+        fill_ratio = area / max(1, component_width * component_height)
+        component = labels == label
+        initial_overlap = float(np.mean(initial_mask[component] > 0))
+        if not (
+            0.01 <= area_ratio <= 0.1
+            and width * 0.3 < center_x < width * 0.7
+            and height * 0.18 < center_y < height * 0.72
+            and 0.45 < aspect_ratio < 1.0
+            and fill_ratio >= 0.35
+            and initial_overlap >= 0.8
+            and x > 0
+            and x + component_width < width
+        ):
+            continue
+        normalized_center_distance = (
+            ((center_x - width / 2) / max(1.0, width / 2)) ** 2
+            + ((center_y - height * 0.48) / max(1.0, height / 2)) ** 2
+        )
+        candidates.append((area * fill_ratio / (1.0 + normalized_center_distance), label))
+
+    if not candidates:
+        return None
+
+    _, anchor_label = max(candidates)
+    y = int(stats[anchor_label, cv2.CC_STAT_TOP])
+    anchor_width = int(stats[anchor_label, cv2.CC_STAT_WIDTH])
+    anchor_height = int(stats[anchor_label, cv2.CC_STAT_HEIGHT])
+    anchor_center_x = float(centroids[anchor_label, 0])
+    anchor = labels == anchor_label
+    support = _portrait_support(
+        initial_mask.shape,
+        anchor_center_x,
+        y,
+        anchor_width,
+        anchor_height,
+        top_half_width=0.5,
+        shoulder_half_width=1.0,
+        bottom_half_width=3.0,
+    )
+    inner_support = _portrait_support(
+        initial_mask.shape,
+        anchor_center_x,
+        y,
+        anchor_width,
+        anchor_height,
+        top_half_width=0.3,
+        shoulder_half_width=0.6,
+        bottom_half_width=1.0,
+    )
+
+    # The narrow support removes distant scenery while the inner multimodal core
+    # teaches GrabCut skin, hair, and clothing colors without fixing the silhouette.
+    trimap = np.full(initial_mask.shape, cv2.GC_PR_BGD, dtype=np.uint8)
+    trimap[support > 0] = cv2.GC_PR_FGD
+    border_size = max(2, round(min(height, width) * 0.035))
+    border = np.zeros(initial_mask.shape, dtype=bool)
+    border[:border_size, :] = True
+    border[-border_size:, :] = True
+    border[:, :border_size] = True
+    border[:, -border_size:] = True
+    outside_support = support == 0
+    trimap[outside_support & (background_distance <= 12.0)] = cv2.GC_BGD
+    trimap[outside_support & border] = cv2.GC_BGD
+
+    core = ((initial_mask > 0) & (inner_support > 0)).astype(np.uint8)
+    core_size = _odd_size(max(5, round(min(height, width) * 0.027)))
+    core = cv2.erode(
+        core,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (core_size, core_size)),
+    )
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    core[anchor | ((gray < 70) & (inner_support > 0))] = 1
+    if np.count_nonzero(core) < 4:
+        return None
+    trimap[core > 0] = cv2.GC_FGD
+
+    try:
+        cv2.grabCut(
+            image,
+            trimap,
+            None,
+            np.zeros((1, 65), np.float64),
+            np.zeros((1, 65), np.float64),
+            4,
+            cv2.GC_INIT_WITH_MASK,
+        )
+    except cv2.error:
+        return None
+
+    refined = np.where(
+        (trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD),
+        255,
+        0,
+    ).astype(np.uint8)
+    refined = repair_mask(refined, target_width, target_height)
+    refined_coverage = float(np.count_nonzero(refined)) / refined.size
+    anchor_retained = float(np.mean(refined[anchor] > 0))
+    if not 0.05 <= refined_coverage <= 0.7 or anchor_retained < 0.9:
+        return None
+    return refined, anchor.astype(np.uint8) * 255
+
+
+def _portrait_support(
+    shape: tuple[int, int],
+    center_x: float,
+    anchor_y: int,
+    anchor_width: int,
+    anchor_height: int,
+    *,
+    top_half_width: float,
+    shoulder_half_width: float,
+    bottom_half_width: float,
+) -> np.ndarray:
+    height, width = shape
+    top_y = max(0, round(anchor_y - anchor_height * 0.55))
+    shoulder_y = min(height - 1, round(anchor_y + anchor_height * 1.05))
+    polygon = np.array(
+        [
+            [round(center_x - anchor_width * top_half_width), top_y],
+            [round(center_x + anchor_width * top_half_width), top_y],
+            [round(center_x + anchor_width * shoulder_half_width), shoulder_y],
+            [round(center_x + anchor_width * bottom_half_width), height - 1],
+            [round(center_x - anchor_width * bottom_half_width), height - 1],
+            [round(center_x - anchor_width * shoulder_half_width), shoulder_y],
+        ],
+        dtype=np.int32,
+    )
+    support = np.zeros((height, width), dtype=np.uint8)
+    cv2.fillPoly(support, [polygon], 255)
+    return support
+
+
+def _odd_size(value: int) -> int:
+    return value if value % 2 == 1 else value + 1
 
 
 def _build_dark_subject_candidate(
