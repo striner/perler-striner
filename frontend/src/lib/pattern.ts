@@ -1,5 +1,5 @@
 import { BRANDS, type BrandId } from "./palette";
-import { nearestBead, paletteRgb, whiteBeadIndex } from "./color";
+import { nearestBead, nearestBeadFrom, paletteRgb, whiteBeadIndex } from "./color";
 import type { RgbaGrid } from "./grid";
 
 export interface Pattern {
@@ -17,6 +17,7 @@ export interface PatternOptions {
   dither: boolean;
   brand: BrandId;
   whiteThreshold?: number;
+  maxColors?: number;
 }
 
 /** Quantize a background-removed RGBA grid to a brand's bead palette. */
@@ -28,6 +29,8 @@ export function generatePattern(
   const { brand, whiteThreshold = 246 } = opts;
   const rgb = paletteRgb(brand);
   const white = whiteBeadIndex(brand);
+  const allowed = selectBrandPalette(img, brand, opts.maxColors);
+  const allowedSet = allowed ? new Set(allowed) : null;
   const n = width * height;
   const cells = new Int16Array(n).fill(-1);
   const counts = new Array<number>(BRANDS[brand].colors.length).fill(0);
@@ -55,10 +58,13 @@ export function generatePattern(
       const [mr, mg, mb] = enhanceMatchColor(r, g, b);
       const pi =
         white !== null &&
+        (!allowedSet || allowedSet.has(white)) &&
         Math.min(mr, mg, mb) >= whiteThreshold &&
         Math.max(mr, mg, mb) - Math.min(mr, mg, mb) <= 10
           ? white
-          : nearestBead(brand, mr, mg, mb);
+          : allowed
+            ? nearestBeadFrom(brand, allowed, mr, mg, mb)
+            : nearestBead(brand, mr, mg, mb);
       cells[i] = pi;
       counts[pi]!++;
       if (!opts.dither) continue;
@@ -94,6 +100,30 @@ export function generatePattern(
     used,
     totalBeads: used.reduce((sum, item) => sum + item.count, 0),
   };
+}
+
+function selectBrandPalette(
+  img: RgbaGrid,
+  brand: BrandId,
+  maxColors: number | undefined
+): number[] | null {
+  if (maxColors === undefined) return null;
+  const limit = Math.max(1, Math.min(BRANDS[brand].colors.length, Math.floor(maxColors)));
+  const counts = new Map<number, number>();
+  for (let offset = 0; offset < img.data.length; offset += 4) {
+    if (img.data[offset + 3]! < 128) continue;
+    const [r, g, b] = enhanceMatchColor(
+      img.data[offset]!,
+      img.data[offset + 1]!,
+      img.data[offset + 2]!
+    );
+    const index = nearestBead(brand, r, g, b);
+    counts.set(index, (counts.get(index) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0] - right[0])
+    .slice(0, limit)
+    .map(([index]) => index);
 }
 
 function enhanceMatchColor(r: number, g: number, b: number): [number, number, number] {

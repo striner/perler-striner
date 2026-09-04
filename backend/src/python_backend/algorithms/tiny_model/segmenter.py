@@ -24,19 +24,13 @@ class UltralyticsSegmenter:
             source=image,
             bboxes=[list(detection.box) for detection in detections],
             device=self.device,
-            half=self.half,
+            **({"quantize": 16} if self.half else {}),
             verbose=False,
         )
-        return _mask_candidates(results, fallback_scores=[item.score for item in detections])
-
-    def automatic_masks(self, image: np.ndarray) -> list[MaskCandidate]:
-        results = self.model.predict(
-            source=image,
-            device=self.device,
-            half=self.half,
-            verbose=False,
+        return _mask_candidates(
+            results,
+            fallback_scores=[item.score for item in detections],
         )
-        return _mask_candidates(results)
 
 
 def _mask_candidates(
@@ -53,10 +47,10 @@ def _mask_candidates(
     candidates = []
     for index, mask in enumerate(masks):
         fallback = (
-            fallback_scores[index]
-            if fallback_scores and index < len(fallback_scores)
-            else 0.5
+            fallback_scores[index] if fallback_scores and index < len(fallback_scores) else 0.5
         )
-        quality = scores[index] if index < len(scores) else fallback
+        quality = fallback
+        if not fallback_scores and index < len(scores):
+            quality = scores[index]
         candidates.append(MaskCandidate(mask=mask, quality=quality))
     return candidates

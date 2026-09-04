@@ -41,12 +41,8 @@ def segment_foreground(
 
     color_prior = None if source_alpha is not None else _color_prior(image)
     trimap = _alpha_trimap(source_alpha) if source_alpha is not None else color_prior.trimap
-    foreground_samples = np.count_nonzero(
-        (trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD)
-    )
-    background_samples = np.count_nonzero(
-        (trimap == cv2.GC_BGD) | (trimap == cv2.GC_PR_BGD)
-    )
+    foreground_samples = np.count_nonzero((trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD))
+    background_samples = np.count_nonzero((trimap == cv2.GC_BGD) | (trimap == cv2.GC_PR_BGD))
     if foreground_samples < 4 or background_samples < 4:
         raise AlgorithmProcessingError("foreground and background samples are insufficient")
 
@@ -65,9 +61,7 @@ def segment_foreground(
     except cv2.error as error:
         raise AlgorithmProcessingError("foreground extraction failed") from error
 
-    mask = np.where(
-        (trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD), 255, 0
-    ).astype(np.uint8)
+    mask = np.where((trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
     mask = repair_mask(mask, target_width, target_height)
     foreground_evidence = None
     if color_prior is not None:
@@ -156,12 +150,8 @@ def _color_prior(image: np.ndarray) -> _ColorPrior:
     centers = _deterministic_color_centers(border_colors, maximum_centers=8)
     distance = _nearest_color_distance(lab, centers)
     border_distance = distance[border_mask > 0]
-    likely_threshold = float(
-        np.clip(np.percentile(border_distance, 90) + 1.0, 8.0, 12.0)
-    )
-    foreground_threshold = float(
-        np.clip(np.percentile(border_distance, 95) + 14.0, 24.0, 28.0)
-    )
+    likely_threshold = float(np.clip(np.percentile(border_distance, 90) + 1.0, 8.0, 12.0))
+    foreground_threshold = float(np.clip(np.percentile(border_distance, 95) + 14.0, 24.0, 28.0))
     cleanup_threshold = min(20.0, foreground_threshold - 8.0)
 
     # A border can contain the subject. Only border pixels explained by the learned
@@ -176,11 +166,9 @@ def _color_prior(image: np.ndarray) -> _ColorPrior:
     trimap[(corner_mask > 0) & (distance <= likely_threshold)] = cv2.GC_BGD
 
     y_coordinates, x_coordinates = np.ogrid[:height, :width]
-    center_support = (
-        ((x_coordinates - (width - 1) / 2) / max(1.0, width * 0.38)) ** 2
-        + ((y_coordinates - (height - 1) / 2) / max(1.0, height * 0.42)) ** 2
-        <= 1.0
-    )
+    center_support = ((x_coordinates - (width - 1) / 2) / max(1.0, width * 0.38)) ** 2 + (
+        (y_coordinates - (height - 1) / 2) / max(1.0, height * 0.42)
+    ) ** 2 <= 1.0
     foreground_seed = (distance > foreground_threshold) & center_support
     foreground_seed = cv2.morphologyEx(
         foreground_seed.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)
@@ -223,14 +211,8 @@ def _dominant_color_foreground_seed(
     dominant_distance = np.linalg.norm(lab - dominant_color, axis=2)
     saturation = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 1] > 42
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    structure = (
-        cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)) > 20
-    )
-    seed = (
-        (dominant_distance > 20.0)
-        & (saturation | structure)
-        & center_support
-    )
+    structure = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)) > 20
+    seed = (dominant_distance > 20.0) & (saturation | structure) & center_support
     return cv2.morphologyEx(
         seed.astype(np.uint8),
         cv2.MORPH_CLOSE,
@@ -295,10 +277,9 @@ def _refine_centered_portrait(
             and x + component_width < width
         ):
             continue
-        normalized_center_distance = (
-            ((center_x - width / 2) / max(1.0, width / 2)) ** 2
-            + ((center_y - height * 0.48) / max(1.0, height / 2)) ** 2
-        )
+        normalized_center_distance = ((center_x - width / 2) / max(1.0, width / 2)) ** 2 + (
+            (center_y - height * 0.48) / max(1.0, height / 2)
+        ) ** 2
         candidates.append((area * fill_ratio / (1.0 + normalized_center_distance), label))
 
     if not candidates:
@@ -444,11 +425,9 @@ def _build_dark_subject_candidate(
     count, labels, stats, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
     height, width = dark.shape
     y_coordinates, x_coordinates = np.ogrid[:height, :width]
-    center_support = (
-        ((x_coordinates - (width - 1) / 2) / max(1.0, width * 0.44)) ** 2
-        + ((y_coordinates - (height - 1) / 2) / max(1.0, height * 0.46)) ** 2
-        <= 1.0
-    )
+    center_support = ((x_coordinates - (width - 1) / 2) / max(1.0, width * 0.44)) ** 2 + (
+        (y_coordinates - (height - 1) / 2) / max(1.0, height * 0.46)
+    ) ** 2 <= 1.0
     contrast_kernel = np.ones((15, 15), np.uint8)
     candidates: list[tuple[float, int]] = []
     for label in range(1, count):
@@ -594,10 +573,7 @@ def _retain_supported_components(
         component_width = int(stats[label, cv2.CC_STAT_WIDTH])
         component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
         touches_border = (
-            x == 0
-            or y == 0
-            or x + component_width == width
-            or y + component_height == height
+            x == 0 or y == 0 or x + component_width == width or y + component_height == height
         )
         if (
             not touches_border
@@ -610,10 +586,9 @@ def _retain_supported_components(
             structured_labels.append(label)
 
         center_x, center_y = centroids[label]
-        normalized_distance = (
-            ((center_x - width / 2) / max(1.0, width / 2)) ** 2
-            + ((center_y - height / 2) / max(1.0, height / 2)) ** 2
-        )
+        normalized_distance = ((center_x - width / 2) / max(1.0, width / 2)) ** 2 + (
+            (center_y - height / 2) / max(1.0, height / 2)
+        ) ** 2
         score = area / (1.0 + normalized_distance)
         if score > fallback_score:
             fallback_label = label
@@ -662,9 +637,9 @@ def _restore_multiscale_subject(
     if protected_pixels == 0:
         return mask
 
-    protected_retained_ratio = float(
-        np.count_nonzero((mask > 0) & (protection > 0))
-    ) / protected_pixels
+    protected_retained_ratio = (
+        float(np.count_nonzero((mask > 0) & (protection > 0))) / protected_pixels
+    )
     protection_to_mask_ratio = protected_pixels / max(1, np.count_nonzero(mask))
 
     if protected_retained_ratio < 0.62 and protection_to_mask_ratio > 1.05:
@@ -711,18 +686,10 @@ def _build_multiscale_protection(
     saturation = cv2.cvtColor(reduced_image, cv2.COLOR_BGR2HSV)[:, :, 1]
     y_coordinates, x_coordinates = np.ogrid[:protection_height, :protection_width]
     center_support = (
-        (
-            (x_coordinates - (protection_width - 1) / 2)
-            / max(1.0, protection_width * 0.46)
-        )
-        ** 2
-        + (
-            (y_coordinates - (protection_height - 1) / 2)
-            / max(1.0, protection_height * 0.48)
-        )
-        ** 2
-        <= 1.0
-    )
+        (x_coordinates - (protection_width - 1) / 2) / max(1.0, protection_width * 0.46)
+    ) ** 2 + (
+        (y_coordinates - (protection_height - 1) / 2) / max(1.0, protection_height * 0.48)
+    ) ** 2 <= 1.0
     seed = (
         (reduced_distance > params.foreground_seed_distance)
         | (
@@ -790,10 +757,9 @@ def _coarse_subject_components(seed: np.ndarray, maximum_components: int) -> np.
     for label in range(1, count):
         area = int(stats[label, cv2.CC_STAT_AREA])
         center_x, center_y = centroids[label]
-        normalized_distance = (
-            ((center_x - width / 2) / max(1.0, width / 2)) ** 2
-            + ((center_y - height / 2) / max(1.0, height / 2)) ** 2
-        )
+        normalized_distance = ((center_x - width / 2) / max(1.0, width / 2)) ** 2 + (
+            (center_y - height / 2) / max(1.0, height / 2)
+        ) ** 2
         if area >= minimum_area and (normalized_distance < 0.8 or area > seed.size * 0.01):
             candidates.append((area / (1.0 + normalized_distance), label))
 
@@ -845,10 +811,7 @@ def _fill_small_mask_holes(mask: np.ndarray, maximum_area: int) -> np.ndarray:
         component_width = int(stats[label, cv2.CC_STAT_WIDTH])
         component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
         touches_border = (
-            x == 0
-            or y == 0
-            or x + component_width == width
-            or y + component_height == height
+            x == 0 or y == 0 or x + component_width == width or y + component_height == height
         )
         if not touches_border and stats[label, cv2.CC_STAT_AREA] <= maximum_area:
             output[labels == label] = 255

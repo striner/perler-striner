@@ -26,7 +26,6 @@ dev = [
     "ruff>=0.12,<1",
 ]
 tiny-model = [
-    "clip @ https://github.com/ultralytics/CLIP/archive/488e81a6711eea7346872b46ea928b367da8889d.zip",
     "ultralytics==8.4.120",
 ]
 

@@ -298,13 +298,15 @@ def test_hyperparameter_schema_and_parser_defaults_stay_aligned() -> None:
         "recovery_neighborhood_ratio",
         "foreground_coverage_threshold",
     }
-    assert defaults.background_recovery_distance == properties[
-        "background_recovery_distance"
-    ]["default"]
+    assert (
+        defaults.background_recovery_distance
+        == properties["background_recovery_distance"]["default"]
+    )
     assert defaults.coarse_subject_count == properties["coarse_subject_count"]["default"]
-    assert defaults.foreground_coverage_threshold == properties[
-        "foreground_coverage_threshold"
-    ]["default"]
+    assert (
+        defaults.foreground_coverage_threshold
+        == properties["foreground_coverage_threshold"]["default"]
+    )
 
     custom = parse_params(
         {

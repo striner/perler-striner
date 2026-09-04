@@ -5,12 +5,13 @@ import {
   acquireGrid,
   cvNativeAlgorithmParams,
   DEFAULT_CV_NATIVE_HYPERPARAMETERS,
+  parseAnalysisEnvelope,
   parseGridEnvelope,
   readProcessorConfig,
+  requestBackendAnalysis,
   requestBackendGrid,
   requestProcessorCapabilities,
   tinyModelAlgorithmParams,
-  validateTinyModelPrompt,
   type ProcessorConfig,
 } from "./processor-client";
 
@@ -62,6 +63,21 @@ describe("readProcessorConfig", () => {
       })
     ).toBeNull();
   });
+
+  it("allows an explicit extended timeout for CPU tiny-model debugging", () => {
+    expect(
+      readProcessorConfig({
+        PUBLIC_PROCESSOR_API_URL: "https://api.example",
+        PUBLIC_PROCESSOR_TIMEOUT_MS: "180000",
+      })
+    ).toMatchObject({ timeoutMs: 180_000 });
+    expect(
+      readProcessorConfig({
+        PUBLIC_PROCESSOR_API_URL: "https://api.example",
+        PUBLIC_PROCESSOR_TIMEOUT_MS: "999999",
+      })
+    ).toMatchObject({ timeoutMs: 300_000 });
+  });
 });
 
 describe("cvNativeAlgorithmParams", () => {
@@ -83,15 +99,120 @@ describe("cvNativeAlgorithmParams", () => {
 });
 
 describe("tiny model parameters", () => {
-  it("trims the prompt and validates phrase limits", () => {
-    expect(tinyModelAlgorithmParams("  person, cat  ")).toEqual({
-      prompt: "person, cat",
+  it("sends the signed analysis and concrete object selection", () => {
+    expect(tinyModelAlgorithmParams("signed-token", ["object_1"])).toEqual({
+      analysis_token: "signed-token",
+      selected_object_ids: ["object_1"],
+      max_colors: 16,
     });
-    expect(validateTinyModelPrompt("person, cat，painting\ndog")).toBeNull();
-    expect(validateTinyModelPrompt(Array.from({ length: 9 }, (_, index) => index).join(","))).toBe(
-      "too_many_phrases"
+    expect(tinyModelAlgorithmParams("signed-token", ["object_2", "object_4"], 20)).toEqual({
+      analysis_token: "signed-token",
+      selected_object_ids: ["object_2", "object_4"],
+      max_colors: 20,
+    });
+  });
+});
+
+describe("tiny model analysis", () => {
+  const analysisEnvelope = (objects: unknown[] = [
+    {
+      id: "object_1",
+      type_id: 0,
+      type_name_en: "person",
+      confidence: 0.91,
+      salience: 0.85,
+      bbox: { x: 0.2, y: 0.1, width: 0.5, height: 0.8 },
+    },
+  ]) =>
+    envelope({
+      data: {
+        version: 1,
+        analysis_token: "signed-token",
+        image: { width: 1200, height: 800 },
+        objects,
+        algorithm: { id: "tiny_model", version: "1.0.0" },
+      },
+    });
+  const tinyConfig = {
+    ...config,
+    algorithm: "tiny_model",
+  };
+
+  it("strictly parses normalized objects", () => {
+    expect(parseAnalysisEnvelope(analysisEnvelope(), tinyConfig)).toEqual({
+      analysisToken: "signed-token",
+      imageWidth: 1200,
+      imageHeight: 800,
+      objects: [
+        {
+          id: "object_1",
+          typeId: 0,
+          typeNameEn: "person",
+          confidence: 0.91,
+          salience: 0.85,
+          bbox: { x: 0.2, y: 0.1, width: 0.5, height: 0.8 },
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["empty objects", analysisEnvelope([])],
+    [
+      "overflowing bbox",
+      analysisEnvelope([
+        {
+          id: "object_1",
+          type_id: 0,
+          type_name_en: "person",
+          confidence: 0.9,
+          salience: 0.8,
+          bbox: { x: 0.8, y: 0.1, width: 0.4, height: 0.8 },
+        },
+      ]),
+    ],
+    ["wrong algorithm", envelope({ data: { ...analysisEnvelope().data, algorithm: { id: "cv_native", version: "1.0.0" } } })],
+  ])("rejects %s", (_name, payload) => {
+    expect(parseAnalysisEnvelope(payload, tinyConfig)).toBeNull();
+  });
+
+  it("posts only image and algorithm identity to analyze", async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body as FormData;
+      expect(body.get("image")).toBeInstanceOf(File);
+      expect(body.get("algorithm")).toBe("tiny_model");
+      expect(body.get("algorithm_version")).toBe("1.0.0");
+      expect(body.get("algorithm_params")).toBeNull();
+      return new Response(JSON.stringify(analysisEnvelope()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await expect(
+      requestBackendAnalysis(
+        new File(["image"], "source.png", { type: "image/png" }),
+        tinyConfig,
+        new AbortController().signal,
+        fetchImpl
+      )
+    ).resolves.toMatchObject({ analysisToken: "signed-token" });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://processor.example/api/v1/analyze",
+      expect.objectContaining({ method: "POST" })
     );
-    expect(validateTinyModelPrompt("x".repeat(65))).toBe("phrase_too_long");
+  });
+
+  it("returns null for backend and contract failures", async () => {
+    const unavailable = vi.fn(async () => new Response("", { status: 503 })) as typeof fetch;
+    await expect(
+      requestBackendAnalysis(
+        new File(["image"], "source.png", { type: "image/png" }),
+        tinyConfig,
+        new AbortController().signal,
+        unavailable
+      )
+    ).resolves.toBeNull();
   });
 });
 

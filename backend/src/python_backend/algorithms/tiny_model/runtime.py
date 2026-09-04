@@ -4,7 +4,7 @@ import importlib.util
 
 import numpy as np
 
-from .detector import UltralyticsDetector
+from .analyzer import UltralyticsAnalyzer
 from .model_store import ModelStore
 from .segmenter import UltralyticsSegmenter
 from .types import Detection, MaskCandidate
@@ -21,8 +21,6 @@ class UltralyticsRuntime:
             or importlib.util.find_spec("ultralytics") is None
         ):
             raise RuntimeInitializationError("tiny-model optional dependencies are not installed")
-        if importlib.util.find_spec("clip") is None:
-            raise RuntimeInitializationError("tiny-model CLIP dependency is not installed")
 
         import torch
 
@@ -30,42 +28,31 @@ class UltralyticsRuntime:
             raise RuntimeInitializationError("CUDA is not available")
 
         store.validate()
+        from ultralytics import SAM, YOLOE
+
+        from .cartoonizer import AnimeGanCartoonizer
+
         self.device = device
-        self._half = device == "cuda"
-        self._model_dir = store.root
-
-        # YOLO-World resolves its CLIP checkpoint from WEIGHTS_DIR/clip. Point it at
-        # the validated local store before any class text is encoded.
-        import ultralytics.nn.text_model as text_model
-        from ultralytics import SAM, YOLOWorld
-
-        text_model.WEIGHTS_DIR = self._model_dir
-        self._detector = UltralyticsDetector(
-            YOLOWorld(store.detector_path, verbose=False),
+        self._analyzer = UltralyticsAnalyzer(
+            YOLOE(store.analyzer_path, verbose=False),
             device,
-            half=self._half,
         )
         self._segmenter = UltralyticsSegmenter(
             SAM(store.segmenter_path),
             device,
-            half=self._half,
+            half=device == "cuda",
         )
+        self._cartoonizer = AnimeGanCartoonizer(store.cartoonizer_path, device)
         if warmup:
             self._warmup()
 
-    def detect(
+    def analyze(
         self,
         image: np.ndarray,
-        prompts: tuple[str, ...],
         confidence_threshold: float,
-        max_instances: int,
+        max_objects: int,
     ) -> list[Detection]:
-        return self._detector.detect(
-            image,
-            prompts,
-            confidence_threshold,
-            max_instances,
-        )
+        return self._analyzer.analyze(image, confidence_threshold, max_objects)
 
     def segment_boxes(
         self,
@@ -74,16 +61,20 @@ class UltralyticsRuntime:
     ) -> list[MaskCandidate]:
         return self._segmenter.segment_boxes(image, detections)
 
-    def automatic_masks(self, image: np.ndarray) -> list[MaskCandidate]:
-        return self._segmenter.automatic_masks(image)
+    def stylize(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        return self._cartoonizer.stylize(image, mask)
 
     def _warmup(self) -> None:
         sample = np.zeros((64, 64, 3), dtype=np.uint8)
-        self.detect(sample, ("object",), 0.35, 1)
-        self._segmenter.segment_boxes(
+        sample[16:48, 16:48] = 127
+        mask = np.zeros((64, 64), dtype=np.uint8)
+        mask[16:48, 16:48] = 255
+        self.analyze(sample, 0.25, 1)
+        self.segment_boxes(
             sample,
-            [Detection((8, 8, 56, 56), 0.9, "object")],
+            [Detection((8, 8, 56, 56), 0.9, 0, "object", 0.9)],
         )
+        self.stylize(sample, mask)
 
 
 def validate_device(device: str) -> None:

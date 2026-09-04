@@ -10,6 +10,7 @@ from python_backend.services.processing import ProcessingService
 from python_backend.web.errors import install_exception_handlers
 from python_backend.web.middleware import install_request_middleware
 from python_backend.web.routes.algorithms import router as algorithms_router
+from python_backend.web.routes.analyze import router as analyze_router
 from python_backend.web.routes.health import router as health_router
 from python_backend.web.routes.process import router as process_router
 
@@ -45,6 +46,7 @@ def create_app(
     install_exception_handlers(application)
     application.include_router(health_router)
     application.include_router(algorithms_router)
+    application.include_router(analyze_router)
     application.include_router(process_router)
     return application
 

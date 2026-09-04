@@ -10,7 +10,9 @@ import numpy as np
 class Detection:
     box: tuple[float, float, float, float]
     score: float
-    phrase: str
+    type_id: int
+    type_name_en: str
+    salience: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,12 +22,11 @@ class MaskCandidate:
 
 
 class InferenceRuntime(Protocol):
-    def detect(
+    def analyze(
         self,
         image: np.ndarray,
-        prompts: tuple[str, ...],
         confidence_threshold: float,
-        max_instances: int,
+        max_objects: int,
     ) -> list[Detection]: ...
 
     def segment_boxes(
@@ -34,4 +35,4 @@ class InferenceRuntime(Protocol):
         detections: list[Detection],
     ) -> list[MaskCandidate]: ...
 
-    def automatic_masks(self, image: np.ndarray) -> list[MaskCandidate]: ...
+    def stylize(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray: ...

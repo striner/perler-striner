@@ -45,3 +45,4 @@ zip/
 # downloaded model artifacts; keep the reproducible download manifest
 data/model/*
 !data/model/download.md
+/weights/

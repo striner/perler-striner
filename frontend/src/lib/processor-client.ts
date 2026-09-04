@@ -18,7 +18,32 @@ export interface ProcessorCapability {
   unavailableReason: string | null;
 }
 
-export type TinyModelPromptError = "too_many_phrases" | "phrase_too_long";
+export interface AnalysisBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface AnalysisObject {
+  id: string;
+  typeId: number;
+  typeNameEn: string;
+  confidence: number;
+  salience: number;
+  bbox: AnalysisBox;
+}
+
+export interface TinyModelAnalysis {
+  analysisToken: string;
+  imageWidth: number;
+  imageHeight: number;
+  objects: AnalysisObject[];
+}
+
+export const DEFAULT_TINY_MODEL_MAX_COLORS = 16;
+export const MIN_TINY_MODEL_MAX_COLORS = 4;
+export const MAX_TINY_MODEL_MAX_COLORS = 20;
 
 export interface CvNativeHyperparameters {
   edgeStrength: number;
@@ -66,18 +91,16 @@ export function cvNativeAlgorithmParams(
   };
 }
 
-export function tinyModelAlgorithmParams(prompt: string): Record<string, string> {
-  return { prompt: prompt.trim() };
-}
-
-export function validateTinyModelPrompt(prompt: string): TinyModelPromptError | null {
-  const phrases = prompt
-    .split(/[,，\r\n]+/)
-    .map((phrase) => phrase.trim())
-    .filter(Boolean);
-  if (phrases.length > 8) return "too_many_phrases";
-  if (phrases.some((phrase) => phrase.length > 64)) return "phrase_too_long";
-  return null;
+export function tinyModelAlgorithmParams(
+  analysisToken: string,
+  selectedObjectIds: string[],
+  maxColors: number = DEFAULT_TINY_MODEL_MAX_COLORS
+): Record<string, string | string[] | number> {
+  return {
+    analysis_token: analysisToken,
+    selected_object_ids: selectedObjectIds,
+    max_colors: maxColors,
+  };
 }
 
 export type AcquireGridResult =
@@ -104,6 +127,7 @@ interface AcquireGridOptions {
 
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const DEFAULT_PROCESSOR_TIMEOUT_MS = 35_000;
+const MAX_PROCESSOR_TIMEOUT_MS = 300_000;
 
 export function readProcessorConfig(env: ProcessorEnvironment): ProcessorConfig | null {
   const baseUrl = env.PUBLIC_PROCESSOR_API_URL?.trim();
@@ -122,7 +146,7 @@ export function readProcessorConfig(env: ProcessorEnvironment): ProcessorConfig 
     env.PUBLIC_PROCESSOR_TIMEOUT_MS || String(DEFAULT_PROCESSOR_TIMEOUT_MS)
   );
   const timeoutMs = Number.isFinite(requestedTimeout)
-    ? Math.min(60_000, Math.max(250, Math.round(requestedTimeout)))
+    ? Math.min(MAX_PROCESSOR_TIMEOUT_MS, Math.max(250, Math.round(requestedTimeout)))
     : DEFAULT_PROCESSOR_TIMEOUT_MS;
   return {
     baseUrl: baseUrl.replace(/\/+$/, ""),
@@ -233,6 +257,103 @@ export async function requestProcessorCapabilities(
   }
 }
 
+export async function requestBackendAnalysis(
+  file: File,
+  config: Pick<ProcessorConfig, "baseUrl" | "algorithm" | "algorithmVersion" | "timeoutMs">,
+  signal: AbortSignal,
+  fetchImpl: typeof fetch = fetch
+): Promise<TinyModelAnalysis | null> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal.aborted) return null;
+  signal.addEventListener("abort", abort, { once: true });
+  const timeout = globalThis.setTimeout(abort, config.timeoutMs);
+
+  try {
+    const body = new FormData();
+    body.set("image", file, file.name);
+    body.set("algorithm", config.algorithm);
+    if (config.algorithmVersion) body.set("algorithm_version", config.algorithmVersion);
+    const response = await fetchImpl(`${config.baseUrl}/api/v1/analyze`, {
+      method: "POST",
+      body,
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    return parseAnalysisEnvelope(await response.json(), config);
+  } catch {
+    return null;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal.removeEventListener("abort", abort);
+  }
+}
+
+export function parseAnalysisEnvelope(
+  payload: unknown,
+  config: Pick<ProcessorConfig, "algorithm" | "algorithmVersion">
+): TinyModelAnalysis | null {
+  if (!isValidSuccessEnvelope(payload) || !isPlainObject(payload.data)) return null;
+  const data = payload.data;
+  if (data.version !== 1 || typeof data.analysis_token !== "string" || !data.analysis_token) {
+    return null;
+  }
+  if (!isPlainObject(data.image) || !isPositiveInteger(data.image.width)) return null;
+  if (!isPositiveInteger(data.image.height) || !isPlainObject(data.algorithm)) return null;
+  if (data.algorithm.id !== config.algorithm || typeof data.algorithm.version !== "string") {
+    return null;
+  }
+  if (config.algorithmVersion && data.algorithm.version !== config.algorithmVersion) return null;
+  if (!Array.isArray(data.objects) || data.objects.length < 1 || data.objects.length > 24) {
+    return null;
+  }
+
+  const objects: AnalysisObject[] = [];
+  const ids = new Set<string>();
+  for (const item of data.objects) {
+    if (!isPlainObject(item) || !isPlainObject(item.bbox)) return null;
+    if (
+      typeof item.id !== "string" ||
+      !item.id ||
+      ids.has(item.id) ||
+      !Number.isInteger(item.type_id) ||
+      (item.type_id as number) < 0 ||
+      typeof item.type_name_en !== "string" ||
+      !item.type_name_en ||
+      !isUnitNumber(item.confidence) ||
+      !isUnitNumber(item.salience) ||
+      !isUnitNumber(item.bbox.x) ||
+      !isUnitNumber(item.bbox.y) ||
+      !isPositiveUnitNumber(item.bbox.width) ||
+      !isPositiveUnitNumber(item.bbox.height) ||
+      item.bbox.x + item.bbox.width > 1.000001 ||
+      item.bbox.y + item.bbox.height > 1.000001
+    ) {
+      return null;
+    }
+    ids.add(item.id);
+    objects.push({
+      id: item.id,
+      typeId: item.type_id as number,
+      typeNameEn: item.type_name_en,
+      confidence: item.confidence,
+      salience: item.salience,
+      bbox: {
+        x: item.bbox.x,
+        y: item.bbox.y,
+        width: item.bbox.width,
+        height: item.bbox.height,
+      },
+    });
+  }
+  return {
+    analysisToken: data.analysis_token,
+    imageWidth: data.image.width,
+    imageHeight: data.image.height,
+    objects,
+  };
+}
+
 export function parseGridEnvelope(
   payload: unknown,
   expectedWidth: number,
@@ -288,6 +409,18 @@ function decodeBase64(value: string): Uint8Array | null {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isUnitNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isPositiveUnitNumber(value: unknown): value is number {
+  return isUnitNumber(value) && value > 0;
 }
 
 function containsBackgroundControl(value: unknown): boolean {

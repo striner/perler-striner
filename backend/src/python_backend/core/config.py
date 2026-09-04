@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     tiny_model_max_concurrency: int = Field(default=1, ge=1, le=1)
     tiny_model_work_max_edge: int = Field(default=1280, ge=320, le=4096)
     tiny_model_warmup: bool = True
+    tiny_model_analysis_confidence: float = Field(default=0.15, ge=0.01, le=0.95)
+    tiny_model_analysis_max_objects: int = Field(default=24, ge=1, le=24)
+    tiny_model_analysis_token_ttl_seconds: int = Field(default=900, ge=30, le=86400)
+    tiny_model_analysis_token_secret: str = Field(default="local-development-secret", min_length=16)
     bento_workers: int = Field(default=1, ge=1)
     bento_replicas: int = Field(default=1, ge=1)
     bento_max_concurrency: int = Field(default=32, ge=1)

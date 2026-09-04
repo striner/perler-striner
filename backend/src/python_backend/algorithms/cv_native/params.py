@@ -44,9 +44,7 @@ def parse_params(values: Mapping[str, Any]) -> CvNativeParams:
         raise InvalidRequestError(f"unsupported cv_native parameter: {sorted(unknown)[0]}")
     return CvNativeParams(
         edge_strength=_number(values.get("edge_strength", 0.65), "edge_strength", 0, 1.5),
-        outline_strength=_number(
-            values.get("outline_strength", 0.1), "outline_strength", 0, 0.3
-        ),
+        outline_strength=_number(values.get("outline_strength", 0.1), "outline_strength", 0, 0.3),
         background_recovery_distance=_number(
             values.get("background_recovery_distance", 6.0),
             "background_recovery_distance",
@@ -56,9 +54,7 @@ def parse_params(values: Mapping[str, Any]) -> CvNativeParams:
         coarse_subject_count=_integer(
             values.get("coarse_subject_count", 1), "coarse_subject_count", 1, 5
         ),
-        protection_scale=_number(
-            values.get("protection_scale", 2.0), "protection_scale", 1, 4
-        ),
+        protection_scale=_number(values.get("protection_scale", 2.0), "protection_scale", 1, 4),
         foreground_seed_distance=_number(
             values.get("foreground_seed_distance", 28.0),
             "foreground_seed_distance",

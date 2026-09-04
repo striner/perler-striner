@@ -23,7 +23,7 @@ def prefetch(model_dir: Path) -> None:
             pass
 
         destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_suffix(destination.suffix + ".part")
+        temporary = Path(f"{destination}.part")
         temporary.unlink(missing_ok=True)
         print(f"downloading {artifact.url}")
         request = urllib.request.Request(

@@ -6,7 +6,8 @@ GPU workers, resource allocation, concurrency limits, batching, and replicas.
 
 The production registry includes `cv_native@1.0.0`, a deterministic CPU-only
 OpenCV algorithm, and `tiny_model@1.0.0`, an optional PyTorch pipeline using
-YOLO-World v2 S, MobileSAM, and CLIP text embeddings. CV Native performs conservative
+YOLOE-26M Prompt-free object analysis and SAM2.1-S box-prompted segmentation.
+CV Native performs conservative
 foreground extraction, a guarded second
 GrabCut pass for strongly centered portraits, mask repair, foreground edge sharpening
 with an optional light adaptive outline, and mask-aware
@@ -23,7 +24,7 @@ python -m venv .venv
 ```
 
 Tiny Model requires the PyTorch build appropriate for the target CPU or CUDA platform,
-the optional package, and three locally verified artifacts:
+the optional package, and three locally verified model artifacts:
 
 ```powershell
 .venv\Scripts\python -m pip install -e ".[tiny-model,dev]"
@@ -54,10 +55,15 @@ batch settings all use the `PYTHON_BACKEND_` prefix. CV Native also supports
 `CV_OPENCV_THREADS` under that prefix.
 
 Tiny Model uses `TINY_MODEL_ENABLED`, `TINY_MODEL_DEVICE`, `TINY_MODEL_DIR`,
-`TINY_MODEL_MAX_CONCURRENCY`, `TINY_MODEL_WORK_MAX_EDGE`, and `TINY_MODEL_WARMUP`.
+`TINY_MODEL_MAX_CONCURRENCY`, `TINY_MODEL_WORK_MAX_EDGE`, `TINY_MODEL_WARMUP`,
+`TINY_MODEL_ANALYSIS_CONFIDENCE`, `TINY_MODEL_ANALYSIS_MAX_OBJECTS`,
+`TINY_MODEL_ANALYSIS_TOKEN_TTL_SECONDS`, and `TINY_MODEL_ANALYSIS_TOKEN_SECRET`.
 Production defaults to `cuda` and never falls back silently to CPU. For functional
 development on a CPU-only machine, explicitly set `PYTHON_BACKEND_TINY_MODEL_DEVICE=cpu`
-and raise `PYTHON_BACKEND_REQUEST_TIMEOUT_SECONDS` for empty-Prompt automatic masks.
+and raise `PYTHON_BACKEND_REQUEST_TIMEOUT_SECONDS` for object analysis and SAM2.1. Set
+the frontend's `PUBLIC_PROCESSOR_TIMEOUT_MS` to the corresponding millisecond value;
+explicit CPU-debug timeouts are capped at five minutes while the production defaults
+remain 30 seconds on the backend and 35 seconds in the browser.
 
 ## API
 
@@ -65,6 +71,9 @@ and raise `PYTHON_BACKEND_REQUEST_TIMEOUT_SECONDS` for empty-Prompt automatic ma
 - `GET /api/v1/algorithms`: registered algorithm capabilities for
   `cv_native@1.0.0` and `tiny_model@1.0.0`. Each item includes `available` and
   `unavailable_reason`; Tiny Model remains discoverable when models or CUDA are absent.
+- `POST /api/v1/analyze`: multipart Tiny Model object analysis. Returns normalized
+  bounding boxes, original YOLOE English object types, confidence, salience, and a signed
+  short-lived `analysis_token`.
 - `POST /api/v1/process`: multipart processing contract.
 
 Processing fields:
@@ -102,24 +111,27 @@ out-of-range, unknown, or non-finite values return the standard error envelope.
 
 ### Tiny Model parameters
 
-`prompt` accepts up to eight target phrases separated by comma, Chinese comma, or
-newline; each phrase is limited to 64 characters. An empty Prompt uses MobileSAM
-automatic candidates and salience ranking. Other parameters retain server defaults:
+Tiny Model uses a two-stage stateless contract. First call `/api/v1/analyze` with the
+original image and `algorithm=tiny_model`. The frontend displays the returned concrete
+objects and submits the same image to `/api/v1/process` with the signed token and selected
+object IDs. The token binds the image SHA-256, detected boxes, algorithm version, and
+expiry without storing image pixels on the server.
 
 | Parameter | Default | Allowed range |
 | :-- | --: | :-- |
-| `prompt` | empty | string |
-| `confidence_threshold` | `0.35` | `0.05` to `0.95` |
-| `max_instances` | `5` | integer `1` to `5` |
-| `mask_iou_threshold` | `0.7` | `0.3` to `0.95` |
+| `analysis_token` | required | signed string from `/api/v1/analyze` |
+| `selected_object_ids` | required | 1 to 24 unique returned IDs |
 | `foreground_coverage_threshold` | `0.2` | `0.05` to `0.8` |
 | `edge_strength` | `0.65` | `0` to `1.5` |
 | `outline_strength` | `0.1` | `0` to `0.3` |
+| `max_colors` | `16` | integer `4` to `20` |
 
-Prompt detections are segmented individually, deduplicated by Mask IoU, repaired, and
-merged. Empty-Prompt mode selects one salient automatic Mask. After background removal,
-the effective subject bounding box is scaled proportionally and centered so at least one
-axis fills the target frame; the subject is never stretched or cropped.
+Selected boxes are segmented individually with SAM2.1-S, repaired, and merged. After
+background removal, the effective subject bounding box is scaled proportionally and
+centered so at least one axis fills the target frame; the subject is never stretched or
+cropped. An AnimeGANv2 PyTorch `celeba_distill` Cartoonizer runs at a maximum 768px edge
+before edge enhancement and foreground-only color quantization. The generated RGBA grid and the frontend's final bead
+sub-palette both contain at most `max_colors` non-transparent colors.
 
 `remove_background` is deliberately not accepted. Every future algorithm must
 remove the background and return a row-major RGBA grid. Algorithm parameters

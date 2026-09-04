@@ -43,6 +43,41 @@ class AlgorithmOutput:
 
 
 @dataclass(frozen=True, slots=True)
+class AlgorithmAnalysisInput:
+    schema_version: int
+    image: ImagePayload
+    algorithm: AlgorithmIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisBox:
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisObject:
+    object_id: str
+    type_id: int
+    type_name_en: str
+    confidence: float
+    salience: float
+    bbox: AnalysisBox
+
+
+@dataclass(frozen=True, slots=True)
+class AlgorithmAnalysisOutput:
+    schema_version: int
+    algorithm: AlgorithmIdentity
+    image_width: int
+    image_height: int
+    analysis_token: str
+    objects: tuple[AnalysisObject, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AlgorithmDescriptor:
     algorithm_id: str
     version: str
@@ -61,3 +96,8 @@ class AlgorithmService(Protocol):
     def descriptor(self) -> AlgorithmDescriptor: ...
 
     async def process(self, request: AlgorithmInput) -> AlgorithmOutput: ...
+
+
+@runtime_checkable
+class AnalyzableAlgorithmService(Protocol):
+    async def analyze(self, request: AlgorithmAnalysisInput) -> AlgorithmAnalysisOutput: ...

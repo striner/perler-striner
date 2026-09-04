@@ -9,50 +9,55 @@ from python_backend.algorithms.cv_native.pixelize import pixelize
 from python_backend.algorithms.cv_native.segmentation import repair_mask
 from python_backend.algorithms.errors import AlgorithmProcessingError
 
+from .analysis_token import TokenObject
 from .framing import normalize_subject_frame
+from .imaging import decode_image, working_image
 from .params import TinyModelParams
-from .types import InferenceRuntime, MaskCandidate
+from .quantize import quantize_foreground, snap_rgba_to_palette
+from .types import Detection, InferenceRuntime, MaskCandidate
 
 
 def run_pipeline(
     request: AlgorithmInput,
     params: TinyModelParams,
     runtime: InferenceRuntime,
+    selected_objects: list[TokenObject],
     max_decoded_pixels: int,
     work_max_edge: int,
 ) -> AlgorithmOutput:
-    image, source_alpha = _decode(request.image.data, max_decoded_pixels)
-    working_image = _working_image(image, work_max_edge)
+    image, source_alpha = decode_image(request.image.data, max_decoded_pixels)
+    working = working_image(image, work_max_edge)
     working_alpha = None
     if source_alpha is not None and np.any(source_alpha < 250):
         working_alpha = cv2.resize(
             source_alpha,
-            (working_image.shape[1], working_image.shape[0]),
+            (working.shape[1], working.shape[0]),
             interpolation=cv2.INTER_AREA,
         )
 
-    if params.prompts:
-        detections = runtime.detect(
-            working_image,
-            params.prompts,
-            params.confidence_threshold,
-            params.max_instances,
+    height, width = working.shape[:2]
+    detections = [
+        Detection(
+            box=(
+                item.box[0] * width,
+                item.box[1] * height,
+                item.box[2] * width,
+                item.box[3] * height,
+            ),
+            score=item.score,
+            type_id=item.type_id,
+            type_name_en=item.type_name_en,
+            salience=item.salience,
         )
-        if not detections:
-            raise AlgorithmProcessingError("prompt did not detect a reliable subject")
-        candidates = runtime.segment_boxes(working_image, detections)
-    else:
-        automatic = runtime.automatic_masks(working_image)
-        selected = _select_salient_candidate(automatic, working_image.shape[:2])
-        candidates = [selected] if selected is not None else []
-
+        for item in selected_objects
+    ]
+    candidates = runtime.segment_boxes(working, detections)
     prepared = _prepare_masks(
         candidates,
-        working_image.shape[:2],
+        working.shape[:2],
         request.target.width,
         request.target.height,
-        params.mask_iou_threshold,
-        params.max_instances,
+        max_instances=len(detections),
     )
     if not prepared:
         raise AlgorithmProcessingError("segmentation did not return a reliable subject")
@@ -63,24 +68,39 @@ def run_pipeline(
         raise AlgorithmProcessingError("segmentation mask is empty")
 
     framed_image, framed_mask = normalize_subject_frame(
-        working_image,
+        working,
         mask,
         request.target.width,
         request.target.height,
     )
+    stylized = runtime.stylize(framed_image, framed_mask)
+    if stylized.shape != framed_image.shape or stylized.dtype != np.uint8:
+        raise AlgorithmProcessingError("cartoonizer returned an invalid image")
     edge_result = enhance_foreground_edges(
-        framed_image,
+        stylized,
         framed_mask,
         params.edge_strength,
         params.outline_strength,
     )
-    rgba = pixelize(
+    quantized = quantize_foreground(
         edge_result.image,
+        framed_mask,
+        edge_result.edge_band,
+        params.max_colors,
+    )
+    rgba = pixelize(
+        quantized.image,
         framed_mask,
         edge_result.edge_band,
         request.target.width,
         request.target.height,
         params.foreground_coverage_threshold,
+    )
+    rgba = snap_rgba_to_palette(
+        rgba,
+        request.target.width,
+        request.target.height,
+        quantized.palette_rgb,
     )
     if len(rgba) != request.target.width * request.target.height * 4:
         raise AlgorithmProcessingError("target grid could not be generated")
@@ -98,7 +118,6 @@ def _prepare_masks(
     shape: tuple[int, int],
     target_width: int,
     target_height: int,
-    iou_threshold: float,
     max_instances: int,
 ) -> list[np.ndarray]:
     prepared: list[np.ndarray] = []
@@ -106,8 +125,6 @@ def _prepare_masks(
     for candidate in ordered:
         mask = _clean_mask(candidate.mask, shape, target_width, target_height)
         if not np.any(mask):
-            continue
-        if any(_mask_iou(mask, retained) >= iou_threshold for retained in prepared):
             continue
         prepared.append(mask)
         if len(prepared) >= max_instances:
@@ -137,89 +154,3 @@ def _clean_mask(
         if stats[label, cv2.CC_STAT_AREA] >= minimum_area:
             cleaned[labels == label] = 255
     return repair_mask(cleaned, target_width, target_height)
-
-
-def _select_salient_candidate(
-    candidates: list[MaskCandidate],
-    shape: tuple[int, int],
-) -> MaskCandidate | None:
-    height, width = shape
-    image_area = height * width
-    center_x = width / 2
-    center_y = height / 2
-    diagonal = max(1.0, float(np.hypot(center_x, center_y)))
-    ranked: list[tuple[float, MaskCandidate]] = []
-    for candidate in candidates:
-        mask = np.asarray(candidate.mask) > 0.5
-        if mask.shape != shape:
-            mask = cv2.resize(
-                mask.astype(np.uint8),
-                (width, height),
-                interpolation=cv2.INTER_NEAREST,
-            ).astype(bool)
-        area = int(np.count_nonzero(mask))
-        area_ratio = area / image_area
-        if area_ratio < 0.005 or area_ratio > 0.85:
-            continue
-        points = cv2.findNonZero(mask.astype(np.uint8))
-        if points is None:
-            continue
-        x, y, box_width, box_height = cv2.boundingRect(points)
-        candidate_x = x + box_width / 2
-        candidate_y = y + box_height / 2
-        center_score = max(
-            0.0,
-            1.0 - np.hypot(candidate_x - center_x, candidate_y - center_y) / diagonal,
-        )
-        boundary_contacts = sum(
-            (x <= 1, y <= 1, x + box_width >= width - 1, y + box_height >= height - 1)
-        )
-        if boundary_contacts >= 3 and area_ratio >= 0.15:
-            continue
-        boundary_penalty = boundary_contacts / 4
-        area_score = min(1.0, np.sqrt(area_ratio / 0.35))
-        quality = min(1.0, max(0.0, candidate.quality))
-        score = quality * 0.45 + center_score * 0.35 + area_score * 0.3 - boundary_penalty * 0.15
-        ranked.append((float(score), MaskCandidate(mask=mask, quality=candidate.quality)))
-    if not ranked:
-        return None
-    return max(ranked, key=lambda item: item[0])[1]
-
-
-def _mask_iou(first: np.ndarray, second: np.ndarray) -> float:
-    first_foreground = first > 0
-    second_foreground = second > 0
-    union = np.count_nonzero(first_foreground | second_foreground)
-    if union == 0:
-        return 0.0
-    intersection = np.count_nonzero(first_foreground & second_foreground)
-    return float(intersection / union)
-
-
-def _decode(data: bytes, max_decoded_pixels: int) -> tuple[np.ndarray, np.ndarray | None]:
-    encoded = np.frombuffer(data, dtype=np.uint8)
-    decoded = cv2.imdecode(encoded, cv2.IMREAD_UNCHANGED)
-    if decoded is None or decoded.size == 0:
-        raise AlgorithmProcessingError("image could not be decoded")
-    height, width = decoded.shape[:2]
-    if height * width > max_decoded_pixels:
-        raise AlgorithmProcessingError("decoded image is too large")
-
-    alpha = None
-    if decoded.ndim == 3 and decoded.shape[2] == 4:
-        image = decoded[:, :, :3]
-        alpha = decoded[:, :, 3]
-    else:
-        image = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
-        if image is None:
-            raise AlgorithmProcessingError("image channels are unsupported")
-    return image, alpha
-
-
-def _working_image(image: np.ndarray, maximum_edge: int) -> np.ndarray:
-    height, width = image.shape[:2]
-    scale = min(1.0, maximum_edge / max(height, width))
-    if scale == 1.0:
-        return image.copy()
-    target = (max(1, round(width * scale)), max(1, round(height * scale)))
-    return cv2.resize(image, target, interpolation=cv2.INTER_AREA)

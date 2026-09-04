@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
-from python_backend.algorithms.contracts import AlgorithmInput, AlgorithmOutput
-from python_backend.algorithms.errors import AlgorithmTimeoutError
+from python_backend.algorithms.contracts import (
+    AlgorithmAnalysisInput,
+    AlgorithmAnalysisOutput,
+    AlgorithmInput,
+    AlgorithmOutput,
+    AnalyzableAlgorithmService,
+)
+from python_backend.algorithms.errors import AlgorithmNotImplementedError, AlgorithmTimeoutError
 from python_backend.algorithms.registry import AlgorithmRegistry
 from python_backend.algorithms.validation import validate_algorithm_output
 
@@ -26,4 +32,20 @@ class ProcessingService:
         except TimeoutError as error:
             raise AlgorithmTimeoutError() from error
         validate_algorithm_output(request, output)
+        return output
+
+    async def analyze(self, request: AlgorithmAnalysisInput) -> AlgorithmAnalysisOutput:
+        algorithm = self.registry.resolve(
+            request.algorithm.algorithm_id,
+            request.algorithm.version,
+        )
+        if not isinstance(algorithm, AnalyzableAlgorithmService):
+            raise AlgorithmNotImplementedError()
+        try:
+            output = await asyncio.wait_for(
+                algorithm.analyze(request),
+                timeout=self.timeout_seconds,
+            )
+        except TimeoutError as error:
+            raise AlgorithmTimeoutError() from error
         return output

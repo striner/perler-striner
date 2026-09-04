@@ -1,46 +1,52 @@
-# 轻量终端 AI 图像像素化任务清单
+# 轻量终端 AI 对象选择与插画像素化任务清单
 
-## 阶段 1：规格确认
+## 阶段 1：规格与契约
 
-- [x] 确认最终拼豆颜色量化交给前端，后端不承担独立的非拼豆颜色量化。
-- [x] 验证检测/分割/文本编码模型工件、许可证和获取来源；以 `yolov8s-worldv2.pt` 替代不存在的 nano 工件。
-- [ ] 部署方确认 Ultralytics/YOLO-World 的 AGPL-3.0 与实际分发模式兼容。
-- [x] 确认 Prompt 支持多主体、允许为空，空值默认选择最显眼主体；失败回退浏览器。
-- [x] 确认多主体逐实例分割后合并 Mask，并采用首版默认置信度、实例上限和 Mask IoU 去重参数。
-- [x] 确认 Prompt 分隔格式、数量/长度限制和复杂自然语言能力边界。
-- [x] 确认 POC 生产使用 NVIDIA CUDA + PyTorch，热启动单图目标 `3` 秒、并发 `1`、请求超时 `30` 秒；开发环境允许显式 FP32 CPU 调试，不提供生产自动 CPU 降级。
-- [x] 确认主体内部/轮廓保护区差异化采样、模式可用性行为和 `tiny_model@1.0.0` 标识。
-- [x] 确认背景移除后裁掉透明外边，并将全部有效主体的联合包围盒等比放大、居中到目标画幅，不拉伸或裁切主体。
-- [ ] 在 CUDA 验收设备确定 PyTorch/CUDA 版本、显存峰值和模型缓存大小。
+- [x] 确认上传后立即分析、前端显示 bbox、用户勾选实例、Generate 后继续处理的两阶段交互。
+- [x] 确认移除 Subject Prompt 和 CLIP 图片区域匹配路线。
+- [x] 确认首选 YOLOE-26M Prompt-free + SAM2.1-S，运行模型目标不超过 200 MiB。
+- [x] 更新 SPEC、PLAN、TASK。
+- [x] 定义分析输入、候选对象、bbox 和 token 数据契约。
+- [x] 定义 Tiny Model 生成参数中的 `analysis_token` 与 `selected_object_ids`。
 
-## 阶段 2：模型与运行时
+## 阶段 2：后端对象分析
 
-- [x] 验证并锁定检测器、分割器和 CLIP 文本编码器版本、大小、SHA-256、来源与许可证。
-- [x] 实现离线模型预取、完整性校验、`data/model` 缓存目录和加载状态；请求路径不下载模型。
-- [x] 增加 CUDA GPU 并发 `1`、排队和 `30` 秒生产超时配置，确保 PyTorch 推理不阻塞 ASGI 事件循环。
-- [x] 增加显式 `cuda` / `cpu` 开发设备配置和统一设备注入；CPU 使用 FP32，生产配置禁止自动降级。
+- [x] 增加 YOLOE 和 SAM2.1 工件的大小、SHA-256、下载与校验。
+- [x] 实现 Prompt-free 对象分析运行时和候选过滤、去重、排序、限量。
+- [x] 使用 YOLOE 原始英文类型并实现同类型实例稳定编号。
+- [x] 实现 HMAC 分析 token 的签发、过期和图片摘要验证。
+- [x] 新增 `/api/v1/analyze`、标准响应信封和错误处理。
+- [x] 增加分析成功、空结果、超限、模型不可用和 token 篡改测试。
 
-## 阶段 3：后端算法
+## 阶段 3：精细分割和生成
 
-- [x] 创建 `algorithms/tiny_model/` 包及 descriptor、params、model_store、runtime、detector、segmenter、pipeline、service。
-- [x] 接入统一 `AlgorithmInput` / `AlgorithmOutput` 和标准错误信封。
-- [x] 实现 Prompt 检测、轻量分割、Mask 修复与噪点清理。
-- [x] 基于有效 Mask 联合包围盒实现透明边裁切、主体等比放大和居中，覆盖多主体、已贴边、细长主体及空 Mask 行为。
-- [x] 实现边缘增强、主体内部/轮廓保护区差异化采样和固定尺寸 RGBA 输出。
-- [x] 注册 `tiny_model` 生产算法并保留 `cv_native`。
+- [x] 修改 Tiny Model 参数解析，移除 Prompt 并要求 token 与非空实例 ID。
+- [x] 使用 SAM2.1-S 对选中 bbox 分别生成并修复 Mask。
+- [x] 保持多实例相对位置、透明边裁切和主体等比放大。
+- [x] 增加 Cartoonizer 接口并以可替换的边缘感知基线打通链路。
+- [x] 接入 AnimeGANv2 PyTorch `celeba_distill` 评估权重并保持 Mask 外像素和最终 Alpha 不变。
+- [x] 保持边缘、`max_colors`、像素化和 RGBA 输出契约。
+- [x] 增加选中单实例、多实例、未知 ID、不同图片、过期 token 和空 Mask 测试。
 
-## 阶段 4：前端与回退
+## 阶段 4：前端交互
 
-- [x] 增加始终可见的 AI 模式、能力驱动的可用状态/原因和 Prompt 输入。
-- [x] 复用 Generate/等待/Download 状态与生成期间控件锁定。
-- [x] 接入后端失败、空响应和非法输出的浏览器回退及既有通知。
+- [x] 增加 analyze 客户端、严格响应解析和自动取消。
+- [x] Tiny Model 上传或切换后自动进入 analyzing。
+- [x] 在原图上叠加可点击 bbox、原始英文类型和实例编号。
+- [x] 增加实例复选列表、默认显著主体和至少一项校验。
+- [x] 移除 Tiny Model Subject Prompt 控件。
+- [x] 将选择变化接入 Generate/Download 状态机且不重复分析。
+- [x] 分析或生成失败时保持浏览器回退与 5 秒通知。
 
-## 阶段 5：验证与文档
+## 阶段 5：工件与验收
 
-- [x] 编写后端和前端自动化测试，覆盖多主体 Mask 合并、空 Prompt 和浏览器回退。
-- [x] 在纯 CPU 环境跑通真实模型完整链路；Prompt 热请求约 `0.82s`，空 Prompt 自动 Mask 约 `38.85s`，仅作为功能记录。
-- [x] 增加透明边裁切与构图测试，验证主体不拉伸、不裁切、多实例相对位置不变且输出 Alpha/尺寸契约正确。
-- [ ] 使用真实样本与 `browser_native`、`cv_native` 对比主体/背景/边缘指标。
-- [ ] 在 NVIDIA CUDA 设备验证启动预热、热启动单图 `3` 秒目标、并发排队、`30` 秒超时和显存峰值。
-- [x] 记录可复现下载/安装/运行命令、CPU 功能数据、未覆盖场景和剩余风险。
-- [x] 模型工件不提交 Git，检查日志和构建产物不含图片内容。
+- [x] 下载并验证 YOLOE-26M Prompt-free 和 SAM2.1-S 工件。
+- [x] 更新 `data/model/download.md`、后端 README、`.env.example` 和许可证说明。
+- [x] 使用 `007-src.jpg` 验证对象类型、bbox、选择和精细 Mask。
+- [x] 比较 AnimeGANv2 `celeba_distill`、`face_paint_512_v2`、`paprika` 和权重插值效果，确定当前 POC 使用 `celeba_distill`。
+- [x] 使用 `007-src.jpg` 完成 AnimeGAN 集成后的真实 CPU 接口与 Chrome 风格化生成测试，并记录扁平度改善和身份细节变化限制。
+- [ ] 使用多人物、动物、台阶、边缘主体、重叠对象和无候选样本验收。
+- [x] 运行 Ruff、pytest、Vitest、Astro check 和 build。
+- [x] 真实 Chrome 验证分析、选择、Generate、等待、Download 和回退。
+- [ ] 在 NVIDIA CUDA 环境记录显存、热请求时延和并发排队指标。
+- [ ] 确认或替换 Cartoonizer 最终权重、训练来源和生产许可证，并完成扩展样本风格验收及身份细节可接受性评估。

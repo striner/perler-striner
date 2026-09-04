@@ -1,52 +1,48 @@
 # Tiny Model Artifacts
 
-Model binaries are local runtime artifacts and are not committed to Git. Download all
-three files before enabling `tiny_model`; the service validates exact size and SHA-256
-before loading any model.
-
-The originally proposed `ultralytics/yolo-world-nano` artifact could not be verified in
-the public Ultralytics or Hugging Face releases. The POC therefore uses the smallest
-published Ultralytics YOLO-World v2 checkpoint, `yolov8s-worldv2.pt`.
+Model binaries are local runtime artifacts and are not committed to Git. Download all three
+files before enabling `tiny_model`; service startup validates
+their exact byte size and SHA-256. Request handling never downloads weights.
 
 ## Locked Files
 
 | Destination | Bytes | SHA-256 | Source |
 | :-- | --: | :-- | :-- |
-| `data/model/yolov8s-worldv2.pt` | `25,923,032` | `9b2c17ab6124a913e9b3a5c170617920d91b0f01111a8479da69f00e2cf27792` | [Ultralytics assets v8.4.0](https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s-worldv2.pt) |
-| `data/model/mobile_sam.pt` | `40,728,226` | `6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f` | [Ultralytics assets v8.4.0](https://github.com/ultralytics/assets/releases/download/v8.4.0/mobile_sam.pt) |
-| `data/model/clip/ViT-B-32.pt` | `353,976,522` | `40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af` | [OpenAI CLIP](https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt) |
+| `data/model/yoloe-26m-seg-pf.pt` | `72,857,475` | `4a03f83695314f2dfb5fd6ebc3866100af525645b6490907bde31e4c0e4ffbd5` | [Ultralytics assets v8.4.0](https://github.com/ultralytics/assets/releases/download/v8.4.0/yoloe-26m-seg-pf.pt) |
+| `data/model/sam2.1_s.pt` | `92,319,866` | `60f9e43f1307be192eef341437e02c40f32cd61cf36a97a203a0998a2952873a` | [Ultralytics assets v8.4.0](https://github.com/ultralytics/assets/releases/download/v8.4.0/sam2.1_s.pt) |
+| `data/model/animegan2-celeba-distill.pt` | `8,603,556` | `a3740d98f99efe2ee6c332de2b800f542ddbb2d15e835c07e9bf667c29cef8a7` | [AnimeGANv2 PyTorch, commit `25d7b01`](https://raw.githubusercontent.com/bryandlee/animegan2-pytorch/25d7b017267208dfaf34026aa3425e518372aa2f/weights/celeba_distill.pt) |
 
-Dynamic text prompts require the CLIP text encoder. The complete weight footprint is
-`420,627,780` bytes (about `401 MiB`), not the original unverified 35 MB estimate.
+The validated artifact footprint is `173,780,897` bytes, about `165.7 MiB`. YOLOE uses
+its built-in Prompt-free vocabulary and original English names for type and bounding-box
+analysis. SAM2.1-S refines only the boxes selected by the user. The `celeba_distill`
+generator provides the evaluation-only flat portrait style.
 
 ## Download
 
-The cross-platform prefetch command downloads to temporary files and validates the
-locked size and SHA-256 before use:
+The cross-platform prefetch command downloads to temporary files, verifies each file,
+and atomically moves it into `data/model/`:
 
 ```powershell
 cd backend
 .venv\Scripts\python -m python_backend.algorithms.tiny_model.prefetch
 ```
 
-The equivalent manual PowerShell commands are:
-
-Run from the repository root in PowerShell:
+Equivalent manual PowerShell commands, run from the repository root:
 
 ```powershell
-New-Item -ItemType Directory -Force data/model/clip | Out-Null
+New-Item -ItemType Directory -Force data/model | Out-Null
 Start-BitsTransfer `
-  https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s-worldv2.pt `
-  data/model/yolov8s-worldv2.pt
+  https://github.com/ultralytics/assets/releases/download/v8.4.0/yoloe-26m-seg-pf.pt `
+  data/model/yoloe-26m-seg-pf.pt
 Start-BitsTransfer `
-  https://github.com/ultralytics/assets/releases/download/v8.4.0/mobile_sam.pt `
-  data/model/mobile_sam.pt
+  https://github.com/ultralytics/assets/releases/download/v8.4.0/sam2.1_s.pt `
+  data/model/sam2.1_s.pt
 Start-BitsTransfer `
-  https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt `
-  data/model/clip/ViT-B-32.pt
-Get-FileHash data/model/yolov8s-worldv2.pt -Algorithm SHA256
-Get-FileHash data/model/mobile_sam.pt -Algorithm SHA256
-Get-FileHash data/model/clip/ViT-B-32.pt -Algorithm SHA256
+  https://raw.githubusercontent.com/bryandlee/animegan2-pytorch/25d7b017267208dfaf34026aa3425e518372aa2f/weights/celeba_distill.pt `
+  data/model/animegan2-celeba-distill.pt
+Get-FileHash data/model/yoloe-26m-seg-pf.pt -Algorithm SHA256
+Get-FileHash data/model/sam2.1_s.pt -Algorithm SHA256
+Get-FileHash data/model/animegan2-celeba-distill.pt -Algorithm SHA256
 ```
 
 Install the optional runtime from `backend/` after installing the PyTorch build for the
@@ -56,15 +52,16 @@ target CPU or CUDA platform:
 .venv\Scripts\python -m pip install -e ".[tiny-model,dev]"
 ```
 
-The request path never downloads weights. A missing or mismatched file makes the
-algorithm unavailable through the capability endpoint.
+A missing or mismatched file makes Tiny Model unavailable through
+`GET /api/v1/algorithms`; it does not silently download or substitute another model.
 
 ## Licenses
 
-- Ultralytics `8.4.120` runtime and distributed YOLO-World checkpoint: AGPL-3.0.
-- Original YOLO-World project: GPL-3.0.
-- MobileSAM project: Apache-2.0.
-- OpenAI CLIP code and checkpoint source: MIT.
+- Ultralytics `8.4.120` and the distributed YOLOE checkpoint: AGPL-3.0.
+- SAM2.1 project and checkpoint: Apache-2.0.
+- AnimeGANv2 PyTorch generator implementation: MIT, copyright 2021 Bryan Lee.
 
 The deployment owner must confirm that these licenses fit the distribution model before
-shipping the POC beyond an evaluation environment.
+shipping beyond an evaluation environment. The converted `celeba_distill` weight is used
+only for POC evaluation; its upstream training data and production distribution rights
+remain to be confirmed before it can become the final Cartoonizer artifact.

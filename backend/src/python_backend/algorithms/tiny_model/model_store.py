@@ -13,26 +13,30 @@ class ModelArtifact:
     url: str
 
 
-DETECTOR_ARTIFACT = ModelArtifact(
-    "yolov8s-worldv2.pt",
-    25_923_032,
-    "9b2c17ab6124a913e9b3a5c170617920d91b0f01111a8479da69f00e2cf27792",
-    "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s-worldv2.pt",
+ANALYZER_ARTIFACT = ModelArtifact(
+    "yoloe-26m-seg-pf.pt",
+    72_857_475,
+    "4a03f83695314f2dfb5fd6ebc3866100af525645b6490907bde31e4c0e4ffbd5",
+    "https://github.com/ultralytics/assets/releases/download/v8.4.0/yoloe-26m-seg-pf.pt",
 )
 SEGMENTER_ARTIFACT = ModelArtifact(
-    "mobile_sam.pt",
-    40_728_226,
-    "6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f",
-    "https://github.com/ultralytics/assets/releases/download/v8.4.0/mobile_sam.pt",
+    "sam2.1_s.pt",
+    92_319_866,
+    "60f9e43f1307be192eef341437e02c40f32cd61cf36a97a203a0998a2952873a",
+    "https://github.com/ultralytics/assets/releases/download/v8.4.0/sam2.1_s.pt",
 )
-TEXT_ENCODER_ARTIFACT = ModelArtifact(
-    "clip/ViT-B-32.pt",
-    353_976_522,
-    "40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af",
-    "https://openaipublic.azureedge.net/clip/models/"
-    "40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
+CARTOONIZER_ARTIFACT = ModelArtifact(
+    "animegan2-celeba-distill.pt",
+    8_603_556,
+    "a3740d98f99efe2ee6c332de2b800f542ddbb2d15e835c07e9bf667c29cef8a7",
+    "https://raw.githubusercontent.com/bryandlee/animegan2-pytorch/"
+    "25d7b017267208dfaf34026aa3425e518372aa2f/weights/celeba_distill.pt",
 )
-ARTIFACTS = (DETECTOR_ARTIFACT, SEGMENTER_ARTIFACT, TEXT_ENCODER_ARTIFACT)
+ARTIFACTS = (
+    ANALYZER_ARTIFACT,
+    SEGMENTER_ARTIFACT,
+    CARTOONIZER_ARTIFACT,
+)
 
 
 class ModelStoreError(RuntimeError):
@@ -44,22 +48,20 @@ class ModelStore:
         self.root = root.expanduser().resolve()
 
     @property
-    def detector_path(self) -> Path:
-        return self.root / DETECTOR_ARTIFACT.relative_path
+    def analyzer_path(self) -> Path:
+        return self.root / ANALYZER_ARTIFACT.relative_path
 
     @property
     def segmenter_path(self) -> Path:
         return self.root / SEGMENTER_ARTIFACT.relative_path
 
+    @property
+    def cartoonizer_path(self) -> Path:
+        return self.root / CARTOONIZER_ARTIFACT.relative_path
+
     def validate(self) -> None:
         for artifact in ARTIFACTS:
-            path = self.root / artifact.relative_path
-            if not path.is_file():
-                raise ModelStoreError(f"model file is missing: {artifact.relative_path}")
-            if path.stat().st_size != artifact.size:
-                raise ModelStoreError(f"model size is invalid: {artifact.relative_path}")
-            if _sha256(path) != artifact.sha256:
-                raise ModelStoreError(f"model checksum is invalid: {artifact.relative_path}")
+            self.validate_artifact(artifact)
 
     def validate_artifact(self, artifact: ModelArtifact) -> None:
         path = self.root / artifact.relative_path

@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  ImagePlus,
   LoaderCircle,
   RotateCcw,
   WandSparkles,
@@ -29,7 +30,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { ui, type Locale } from "@/i18n/ui";
 import { type RgbaGrid } from "@/lib/grid";
 import { BRANDS, type BrandId } from "@/lib/palette";
@@ -38,13 +38,18 @@ import {
   acquireGrid,
   cvNativeAlgorithmParams,
   DEFAULT_CV_NATIVE_HYPERPARAMETERS,
+  DEFAULT_TINY_MODEL_MAX_COLORS,
+  MAX_TINY_MODEL_MAX_COLORS,
+  MIN_TINY_MODEL_MAX_COLORS,
   readProcessorConfig,
+  requestBackendAnalysis,
   requestProcessorCapabilities,
   tinyModelAlgorithmParams,
-  validateTinyModelPrompt,
+  type AnalysisObject,
   type CvNativeHyperparameters,
   type ProcessorCapability,
   type ProcessingMode,
+  type TinyModelAnalysis,
 } from "@/lib/processor-client";
 import { patternRenderSize, renderExport, renderPattern } from "@/lib/render";
 
@@ -62,6 +67,7 @@ const DEFAULT_BEADS = 87;
 const PROCESSOR_CONFIG = readProcessorConfig(import.meta.env);
 
 type GenerationState = "empty" | "dirty" | "generating" | "ready";
+type AnalysisState = "idle" | "analyzing" | "ready" | "failed";
 
 interface HyperparameterControl {
   key: keyof CvNativeHyperparameters;
@@ -70,6 +76,29 @@ interface HyperparameterControl {
   max: number;
   step: number;
   format?: (value: number) => string;
+}
+
+interface LabeledAnalysisObject extends AnalysisObject {
+  displayLabel: string;
+}
+
+function labelAnalysisObjects(objects: AnalysisObject[]): LabeledAnalysisObject[] {
+  const totals = new Map<number, number>();
+  const seen = new Map<number, number>();
+  for (const object of objects) {
+    totals.set(object.typeId, (totals.get(object.typeId) ?? 0) + 1);
+  }
+  return objects.map((object) => {
+    const number = (seen.get(object.typeId) ?? 0) + 1;
+    seen.set(object.typeId, number);
+    return {
+      ...object,
+      displayLabel:
+        (totals.get(object.typeId) ?? 0) > 1
+          ? `${object.typeNameEn} ${number}`
+          : object.typeNameEn,
+    };
+  });
 }
 
 // Built-in sample: a little pixel heart so the app demos without an upload.
@@ -150,7 +179,9 @@ export default function PerlerStudio({
   const [processingMode, setProcessingMode] =
     useState<ProcessingMode>("browser_native");
   const [fallbackNotice, setFallbackNotice] = useState(0);
-  const [subjectPrompt, setSubjectPrompt] = useState("");
+  const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
+  const [analysis, setAnalysis] = useState<TinyModelAnalysis | null>(null);
+  const [selectedObjectIds, setSelectedObjectIds] = useState<Set<string>>(new Set());
   const [processorCapabilities, setProcessorCapabilities] = useState<
     ProcessorCapability[] | null
   >(null);
@@ -160,7 +191,9 @@ export default function PerlerStudio({
   const [hyperparameters, setHyperparameters] = useState<CvNativeHyperparameters>(
     DEFAULT_CV_NATIVE_HYPERPARAMETERS
   );
+  const [settingsExpanded, setSettingsExpanded] = useState(true);
   const [hyperparametersExpanded, setHyperparametersExpanded] = useState(false);
+  const [maxColors, setMaxColors] = useState(DEFAULT_TINY_MODEL_MAX_COLORS);
   const [generationState, setGenerationState] = useState<GenerationState>("empty");
   const [brand, setBrand] = useState<BrandId>("mard221");
   const [beadsAcross, setBeadsAcross] = useState(DEFAULT_BEADS);
@@ -176,7 +209,10 @@ export default function PerlerStudio({
   const fileRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
   const requestControllerRef = useRef<AbortController | null>(null);
+  const analysisControllerRef = useRef<AbortController | null>(null);
   const fileInputId = useId();
+  const settingsContentId = useId();
+  const hyperparametersContentId = useId();
 
   useEffect(() => {
     if (!fallbackNotice) return;
@@ -185,7 +221,10 @@ export default function PerlerStudio({
   }, [fallbackNotice]);
 
   useEffect(() => {
-    return () => requestControllerRef.current?.abort();
+    return () => {
+      requestControllerRef.current?.abort();
+      analysisControllerRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -223,6 +262,11 @@ export default function PerlerStudio({
       requestIdRef.current += 1;
       setGridImage(null);
       setPattern(null);
+      analysisControllerRef.current?.abort();
+      analysisControllerRef.current = null;
+      setAnalysis(null);
+      setSelectedObjectIds(new Set());
+      setAnalysisState("idle");
       setFallbackNotice(0);
       setGenerationState("dirty");
     } catch {
@@ -244,7 +288,6 @@ export default function PerlerStudio({
     (capability) => capability.id === "tiny_model" && capability.version === "1.0.0"
   );
   const tinyModelAvailable = Boolean(PROCESSOR_CONFIG && tinyModelCapability?.available);
-  const tinyModelPromptError = validateTinyModelPrompt(subjectPrompt);
   const tinyModelUnavailableMessage = !PROCESSOR_CONFIG
     ? t.tinyModelNotConfigured
     : capabilitiesLoading
@@ -258,6 +301,7 @@ export default function PerlerStudio({
                 tinyModelCapability.unavailableReason || t.tinyModelBackendUnavailable
               )
             : null;
+  const labeledAnalysisObjects = labelAnalysisObjects(analysis?.objects ?? []);
   const processingModeLabel =
     processingMode === "cv_native"
       ? t.cvNative
@@ -265,8 +309,58 @@ export default function PerlerStudio({
         ? t.tinyModel
         : t.browserNative;
 
+  useEffect(() => {
+    analysisControllerRef.current?.abort();
+    analysisControllerRef.current = null;
+    setAnalysis(null);
+    setSelectedObjectIds(new Set());
+    if (processingMode !== "tiny_model" || !source) {
+      setAnalysisState("idle");
+      return;
+    }
+    if (!source.file || !PROCESSOR_CONFIG || !tinyModelAvailable) {
+      setAnalysisState("failed");
+      setFallbackNotice((event) => event + 1);
+      return;
+    }
+
+    const controller = new AbortController();
+    analysisControllerRef.current = controller;
+    setAnalysisState("analyzing");
+    setFallbackNotice(0);
+    const config = {
+      ...PROCESSOR_CONFIG,
+      algorithm: "tiny_model",
+      algorithmVersion: "1.0.0",
+    };
+    void requestBackendAnalysis(source.file, config, controller.signal).then((result) => {
+      if (controller.signal.aborted || analysisControllerRef.current !== controller) return;
+      analysisControllerRef.current = null;
+      if (!result) {
+        setAnalysisState("failed");
+        setFallbackNotice((event) => event + 1);
+        return;
+      }
+      const defaultObject = result.objects.reduce((best, item) =>
+        item.salience > best.salience ? item : best
+      );
+      setAnalysis(result);
+      setSelectedObjectIds(new Set([defaultObject.id]));
+      setAnalysisState("ready");
+    });
+    return () => controller.abort();
+  }, [processingMode, source, tinyModelAvailable]);
+
   const generate = useCallback(async () => {
     if (!source || generationState === "generating") return;
+    if (
+      processingMode === "tiny_model" &&
+      (analysisState === "analyzing" ||
+        analysisState === "idle" ||
+        (analysisState === "ready" && selectedObjectIds.size === 0))
+    ) {
+      return;
+    }
     const w = Math.min(beadsAcross, MAX_BEADS);
     const h = Math.max(
       1,
@@ -275,6 +369,7 @@ export default function PerlerStudio({
     const requestId = ++requestIdRef.current;
     const controller = new AbortController();
     requestControllerRef.current = controller;
+    let resultApplied = false;
     let config = null;
     if (processingMode === "cv_native" && PROCESSOR_CONFIG) {
       config = {
@@ -286,15 +381,26 @@ export default function PerlerStudio({
           ...cvNativeAlgorithmParams(hyperparameters),
         },
       };
-    } else if (processingMode === "tiny_model" && PROCESSOR_CONFIG && tinyModelAvailable) {
+    } else if (
+      processingMode === "tiny_model" &&
+      PROCESSOR_CONFIG &&
+      tinyModelAvailable &&
+      analysisState === "ready" &&
+      analysis
+    ) {
       config = {
         ...PROCESSOR_CONFIG,
         algorithm: "tiny_model",
         algorithmVersion: "1.0.0",
-        algorithmParams: tinyModelAlgorithmParams(subjectPrompt),
+        algorithmParams: tinyModelAlgorithmParams(
+          analysis.analysisToken,
+          [...selectedObjectIds],
+          maxColors
+        ),
       };
     }
 
+    const analysisFellBack = processingMode === "tiny_model" && analysisState === "failed";
     setFallbackNotice(0);
     setGridImage(null);
     setPattern(null);
@@ -310,8 +416,11 @@ export default function PerlerStudio({
         signal: controller.signal,
       });
       if (!controller.signal.aborted && requestId === requestIdRef.current) {
+        resultApplied = true;
         setGridImage(result.grid);
-        if (result.fellBack) setFallbackNotice((event) => event + 1);
+        if (result.fellBack || analysisFellBack) {
+          setFallbackNotice((event) => event + 1);
+        }
         else setFallbackNotice(0);
       }
     } catch (error) {
@@ -322,7 +431,10 @@ export default function PerlerStudio({
         setGenerationState("dirty");
       }
     } finally {
-      if (requestControllerRef.current === controller) requestControllerRef.current = null;
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        if (!resultApplied) setGenerationState("dirty");
+      }
     }
   }, [
     source,
@@ -331,8 +443,11 @@ export default function PerlerStudio({
     processingMode,
     hyperparameters,
     removeBackground,
-    subjectPrompt,
     tinyModelAvailable,
+    maxColors,
+    analysisState,
+    analysis,
+    selectedObjectIds,
   ]);
 
   // Palette matching and dithering remain entirely in the frontend.
@@ -340,7 +455,13 @@ export default function PerlerStudio({
     if (!gridImage) return;
     const frame = requestAnimationFrame(() => {
       try {
-        setPattern(generatePattern(gridImage, { dither, brand }));
+        setPattern(
+          generatePattern(gridImage, {
+            dither,
+            brand,
+            maxColors: processingMode === "tiny_model" ? maxColors : undefined,
+          })
+        );
         setGenerationState("ready");
       } catch (error) {
         console.error("Failed to generate bead pattern", error);
@@ -349,7 +470,7 @@ export default function PerlerStudio({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [gridImage, dither, brand]);
+  }, [gridImage, dither, brand, processingMode, maxColors]);
 
   const updateHyperparameter = useCallback(
     (key: keyof CvNativeHyperparameters, value: number) => {
@@ -370,7 +491,20 @@ export default function PerlerStudio({
     invalidateGeneration();
   }, [invalidateGeneration]);
 
-  const controlsLocked = generationState === "generating";
+  const controlsLocked =
+    generationState === "generating" || analysisState === "analyzing";
+  const toggleObjectSelection = useCallback(
+    (objectId: string) => {
+      setSelectedObjectIds((current) => {
+        const next = new Set(current);
+        if (next.has(objectId)) next.delete(objectId);
+        else next.add(objectId);
+        return next;
+      });
+      invalidateGeneration();
+    },
+    [invalidateGeneration]
+  );
   const hyperparameterControls: HyperparameterControl[] = [
     {
       key: "backgroundRecoveryDistance",
@@ -455,7 +589,7 @@ export default function PerlerStudio({
     : 0;
 
   return (
-    <div className="relative grid gap-6 lg:grid-cols-[320px_1fr]">
+    <div className="relative grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
       {fallbackNotice > 0 && (
         <div
           role="status"
@@ -474,57 +608,48 @@ export default function PerlerStudio({
           </Button>
         </div>
       )}
-      {/* ---- Controls ---- */}
-      <div className="space-y-6">
-        <Card>
+      {/* Grid item order also defines the mobile workflow. */}
+      <div className="contents">
+        <Card className="h-full self-stretch">
           <CardHeader>
-            <CardTitle>{t.imageTitle}</CardTitle>
+            <CardTitle>{t.inputParametersTitle}</CardTitle>
             <CardDescription>{t.imageDesc}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <label
-              htmlFor={controlsLocked ? undefined : fileInputId}
-              tabIndex={controlsLocked ? -1 : 0}
-              aria-disabled={controlsLocked}
-              onKeyDown={(e) =>
-                !controlsLocked &&
-                (e.key === "Enter" || e.key === " ") &&
-                fileRef.current?.click()
-              }
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (controlsLocked) return;
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (controlsLocked) return;
-                setDragOver(false);
-                const f = e.dataTransfer.files[0];
-                if (f) void loadFile(f);
-              }}
-              className={`flex min-h-28 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-4 text-center text-sm transition-colors ${
-                controlsLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-              } ${
-                dragOver
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
-              }`}
-            >
-              {source ? (
-                <img
-                  src={source.thumb}
-                  alt={source.name}
-                  className="max-h-32 max-w-full rounded border object-contain"
-                />
-              ) : (
-                <>
-                  <span className="text-2xl">🖼️</span>
-                  <span className="text-muted-foreground">{t.dropHint}</span>
-                </>
-              )}
-            </label>
+          <CardContent className="flex flex-col gap-4">
+            {processingMode === "tiny_model" && analysisState === "ready" && (
+              <div className="order-3 space-y-2" aria-label={t.detectedObjects}>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>{t.detectedObjects}</Label>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {t.objectsSelected(selectedObjectIds.size, labeledAnalysisObjects.length)}
+                  </span>
+                </div>
+                <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
+                  {labeledAnalysisObjects.map((object) => (
+                    <label
+                      key={object.id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedObjectIds.has(object.id)}
+                        onChange={() => toggleObjectSelection(object.id)}
+                        className="size-4 accent-emerald-600"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{object.displayLabel}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {Math.round(object.confidence * 100)}%
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {selectedObjectIds.size === 0 && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {t.selectAtLeastOneObject}
+                  </p>
+                )}
+              </div>
+            )}
             <input
               id={fileInputId}
               ref={fileRef}
@@ -538,7 +663,7 @@ export default function PerlerStudio({
                 e.target.value = "";
               }}
             />
-            <div className="flex gap-2">
+            <div className="order-1 flex gap-2">
               <Button asChild className="flex-1">
                 <label
                   htmlFor={controlsLocked ? undefined : fileInputId}
@@ -549,6 +674,7 @@ export default function PerlerStudio({
                       : "cursor-pointer"
                   }
                 >
+                  <ImagePlus />
                   {t.chooseImage}
                 </label>
               </Button>
@@ -557,7 +683,11 @@ export default function PerlerStudio({
                 variant="outline"
                 disabled={controlsLocked}
                 onClick={() => {
+                  analysisControllerRef.current?.abort();
                   setSource(makeSample());
+                  setAnalysis(null);
+                  setSelectedObjectIds(new Set());
+                  setAnalysisState("idle");
                   setGridImage(null);
                   setPattern(null);
                   setFallbackNotice(0);
@@ -567,21 +697,17 @@ export default function PerlerStudio({
                 {t.trySample}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.settingsTitle}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
+            <div className="order-2 space-y-2">
               <Label>{t.processingMode}</Label>
               <Select
                 value={processingMode}
                 disabled={controlsLocked}
                 onValueChange={(value) => {
                   setProcessingMode(value as ProcessingMode);
+                  analysisControllerRef.current?.abort();
+                  setAnalysis(null);
+                  setSelectedObjectIds(new Set());
+                  setAnalysisState("idle");
                   invalidateGeneration();
                 }}
               >
@@ -604,38 +730,180 @@ export default function PerlerStudio({
                 </p>
               )}
             </div>
-            {processingMode === "tiny_model" && (
-              <div className="space-y-2">
-                <Label htmlFor="tiny-model-prompt">{t.subjectPrompt}</Label>
-                <Textarea
-                  id="tiny-model-prompt"
-                  value={subjectPrompt}
-                  maxLength={520}
-                  rows={3}
-                  disabled={controlsLocked}
-                  placeholder={t.subjectPromptPlaceholder}
-                  aria-invalid={Boolean(tinyModelPromptError)}
-                  aria-describedby={
-                    tinyModelPromptError ? "tiny-model-prompt-error" : undefined
-                  }
-                  onChange={(event) => {
-                    setSubjectPrompt(event.target.value);
-                    invalidateGeneration();
-                  }}
-                />
-                {tinyModelPromptError && (
-                  <p
-                    id="tiny-model-prompt-error"
-                    className="text-xs text-destructive"
-                    role="alert"
-                  >
-                    {tinyModelPromptError === "too_many_phrases"
-                      ? t.promptTooMany
-                      : t.promptTooLong}
-                  </p>
-                )}
-              </div>
+          </CardContent>
+        </Card>
+
+        <Card className="h-full min-w-0 self-stretch">
+          <CardHeader>
+            <CardTitle>{t.inputPreviewTitle}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              tabIndex={controlsLocked ? -1 : 0}
+              aria-disabled={controlsLocked}
+              aria-label={t.dropHint}
+              role="group"
+              onKeyDown={(event) => {
+                if (
+                  !controlsLocked &&
+                  (event.key === "Enter" || event.key === " ")
+                ) {
+                  event.preventDefault();
+                  fileRef.current?.click();
+                }
+              }}
+              onClick={(event) => {
+                if (
+                  controlsLocked ||
+                  (event.target as HTMLElement).closest("[data-object-box]")
+                ) {
+                  return;
+                }
+                fileRef.current?.click();
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (controlsLocked) return;
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (controlsLocked) return;
+                setDragOver(false);
+                const file = event.dataTransfer.files[0];
+                if (file) void loadFile(file);
+              }}
+              className={`flex min-h-72 w-full items-center justify-center rounded-md border-2 border-dashed p-4 text-center text-sm transition-colors lg:min-h-[360px] ${
+                controlsLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+              } ${
+                dragOver
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 bg-muted/20 hover:border-muted-foreground/50"
+              }`}
+            >
+              {source ? (
+                <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-md border bg-black/5">
+                  <img
+                    src={source.thumb}
+                    alt={source.name}
+                    className="block max-h-[min(55vh,40rem)] max-w-full object-contain"
+                  />
+                  {processingMode === "tiny_model" &&
+                    analysisState === "ready" &&
+                    labeledAnalysisObjects.map((object) => {
+                      const selected = selectedObjectIds.has(object.id);
+                      return (
+                        <button
+                          key={object.id}
+                          type="button"
+                          data-object-box
+                          aria-pressed={selected}
+                          aria-label={t.toggleObject(object.displayLabel)}
+                          title={`${object.displayLabel} · ${Math.round(object.confidence * 100)}%`}
+                          className={`absolute z-10 overflow-visible border-2 text-left transition-colors ${
+                            selected
+                              ? "border-emerald-500 bg-emerald-400/10"
+                              : "border-dashed border-white/70 bg-black/5 hover:border-amber-300"
+                          }`}
+                          style={{
+                            left: `${object.bbox.x * 100}%`,
+                            top: `${object.bbox.y * 100}%`,
+                            width: `${object.bbox.width * 100}%`,
+                            height: `${object.bbox.height * 100}%`,
+                          }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleObjectSelection(object.id);
+                          }}
+                        >
+                          <span
+                            className={`absolute left-0 top-0 max-w-full -translate-y-full truncate px-1.5 py-0.5 text-[11px] font-medium text-white ${
+                              selected ? "bg-emerald-600" : "bg-black/70"
+                            }`}
+                          >
+                            {object.displayLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  {analysisState === "analyzing" && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-sm font-medium text-white">
+                      <LoaderCircle className="mr-2 size-4 animate-spin" />
+                      {t.analyzingObjects}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <ImagePlus className="size-8" />
+                  <span>{t.dropHint}</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div aria-hidden="true" className="col-span-full border-t-2 border-border" />
+
+        <div className="min-w-0 space-y-4">
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={
+              !source ||
+              generationState === "generating" ||
+              (processingMode === "tiny_model" &&
+                (!tinyModelAvailable ||
+                  analysisState === "idle" ||
+                  analysisState === "analyzing" ||
+                  (analysisState === "ready" && selectedObjectIds.size === 0)))
+            }
+            onClick={generationState === "ready" ? download : generate}
+          >
+            {analysisState === "analyzing" ? (
+              <>
+                <LoaderCircle className="animate-spin" />
+                {t.analyzingObjects}
+              </>
+            ) : generationState === "generating" ? (
+              <>
+                <LoaderCircle className="animate-spin" />
+                {t.generating}
+              </>
+            ) : generationState === "ready" ? (
+              <>
+                <Download />
+                {t.download}
+              </>
+            ) : (
+              <>
+                <WandSparkles />
+                {t.generate}
+              </>
             )}
+          </Button>
+
+          <Card>
+          <CardHeader>
+            <CardTitle>{t.settingsTitle}</CardTitle>
+            <CardAction>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-expanded={settingsExpanded}
+                aria-controls={settingsContentId}
+                aria-label={settingsExpanded ? t.collapseSettings : t.expandSettings}
+                onClick={() => setSettingsExpanded((expanded) => !expanded)}
+              >
+                {settingsExpanded ? <ChevronUp /> : <ChevronDown />}
+              </Button>
+            </CardAction>
+          </CardHeader>
+          {settingsExpanded && (
+            <CardContent id={settingsContentId} className="space-y-5">
             <div className="space-y-2">
               <Label>{t.brand}</Label>
               <Select
@@ -736,38 +1004,11 @@ export default function PerlerStudio({
                 onCheckedChange={setGrid}
               />
             </div>
-            <Separator />
-            <Button
-              className="w-full"
-              disabled={
-                !source ||
-                generationState === "generating" ||
-                (processingMode === "tiny_model" &&
-                  (!tinyModelAvailable || Boolean(tinyModelPromptError)))
-              }
-              onClick={generationState === "ready" ? download : generate}
-            >
-              {generationState === "generating" ? (
-                <>
-                  <LoaderCircle className="animate-spin" />
-                  {t.generating}
-                </>
-              ) : generationState === "ready" ? (
-                <>
-                  <Download />
-                  {t.download}
-                </>
-              ) : (
-                <>
-                  <WandSparkles />
-                  {t.generate}
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+            </CardContent>
+          )}
+          </Card>
 
-        {processingMode === "cv_native" && (
+        {(processingMode === "cv_native" || processingMode === "tiny_model") && (
           <Card>
             <CardHeader>
               <CardTitle>{t.hyperparametersTitle}</CardTitle>
@@ -776,8 +1017,20 @@ export default function PerlerStudio({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={controlsLocked || hyperparametersAreDefault}
-                  onClick={resetHyperparameters}
+                  disabled={
+                    controlsLocked ||
+                    (processingMode === "cv_native"
+                      ? hyperparametersAreDefault
+                      : maxColors === DEFAULT_TINY_MODEL_MAX_COLORS)
+                  }
+                  onClick={
+                    processingMode === "cv_native"
+                      ? resetHyperparameters
+                      : () => {
+                          setMaxColors(DEFAULT_TINY_MODEL_MAX_COLORS);
+                          invalidateGeneration();
+                        }
+                  }
                 >
                   <RotateCcw />
                   {t.resetHyperparameters}
@@ -787,7 +1040,7 @@ export default function PerlerStudio({
                   variant="ghost"
                   size="icon-sm"
                   aria-expanded={hyperparametersExpanded}
-                  aria-controls="cv-native-hyperparameters"
+                  aria-controls={hyperparametersContentId}
                   aria-label={
                     hyperparametersExpanded
                       ? t.collapseHyperparameters
@@ -800,37 +1053,66 @@ export default function PerlerStudio({
               </CardAction>
             </CardHeader>
             {hyperparametersExpanded && (
-              <CardContent id="cv-native-hyperparameters" className="space-y-5">
-                {hyperparameterControls.map((control) => {
-                  const value = hyperparameters[control.key];
-                  return (
-                    <div key={control.key} className="space-y-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <Label htmlFor={`hp-${control.key}`} className="leading-5">
-                          {control.label}
-                        </Label>
-                        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                          {control.format ? control.format(value) : value}
-                        </span>
+              <CardContent
+                id={hyperparametersContentId}
+                className="space-y-5"
+              >
+                {processingMode === "cv_native" ? (
+                  hyperparameterControls.map((control) => {
+                    const value = hyperparameters[control.key];
+                    return (
+                      <div key={control.key} className="space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <Label htmlFor={`hp-${control.key}`} className="leading-5">
+                            {control.label}
+                          </Label>
+                          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                            {control.format ? control.format(value) : value}
+                          </span>
+                        </div>
+                        <Slider
+                          id={`hp-${control.key}`}
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={[value]}
+                          disabled={controlsLocked}
+                          onValueChange={([next]) =>
+                            updateHyperparameter(control.key, next!)
+                          }
+                        />
                       </div>
-                      <Slider
-                        id={`hp-${control.key}`}
-                        min={control.min}
-                        max={control.max}
-                        step={control.step}
-                        value={[value]}
-                        disabled={controlsLocked}
-                        onValueChange={([next]) =>
-                          updateHyperparameter(control.key, next!)
-                        }
-                      />
+                    );
+                  })
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <Label htmlFor="tiny-max-colors" className="leading-5">
+                        {t.maxColors}
+                      </Label>
+                      <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                        {maxColors}
+                      </span>
                     </div>
-                  );
-                })}
+                    <Slider
+                      id="tiny-max-colors"
+                      min={MIN_TINY_MODEL_MAX_COLORS}
+                      max={MAX_TINY_MODEL_MAX_COLORS}
+                      step={1}
+                      value={[maxColors]}
+                      disabled={controlsLocked}
+                      onValueChange={([next]) => {
+                        setMaxColors(next!);
+                        invalidateGeneration();
+                      }}
+                    />
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>
         )}
+        </div>
       </div>
 
       {/* ---- Pattern + legend ---- */}

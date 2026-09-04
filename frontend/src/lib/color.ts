@@ -180,3 +180,32 @@ export function nearestBead(
   m.cache.set(key, best);
   return best;
 }
+
+/** Index of the perceptually nearest bead restricted to selected palette indices. */
+export function nearestBeadFrom(
+  brand: BrandId,
+  indices: readonly number[],
+  r: number,
+  g: number,
+  b: number
+): number {
+  if (!indices.length) return nearestBead(brand, r, g, b);
+  const target = rgbToLab(
+    Math.max(0, Math.min(255, Math.round(r))),
+    Math.max(0, Math.min(255, Math.round(g))),
+    Math.max(0, Math.min(255, Math.round(b)))
+  );
+  const matcher = getMatcher(brand);
+  let best = indices[0]!;
+  let bestDistance = Infinity;
+  for (const index of indices) {
+    const candidate = matcher.lab[index];
+    if (!candidate) continue;
+    const distance = ciede2000(target, candidate);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
+    }
+  }
+  return best;
+}
